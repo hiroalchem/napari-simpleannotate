@@ -56,7 +56,7 @@ class BboxQWidget(QWidget):
         dname = QFileDialog.getExistingDirectory(self, "Open directory", "/")
         if dname:
             files = os.listdir(dname)
-            image_files = [f for f in files if f.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff"))]
+            image_files = sorted([f for f in files if f.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff"))])
             for image_file in image_files:
                 self.listWidget.addItem(os.path.join(dname, image_file))
 
@@ -86,8 +86,15 @@ class BboxQWidget(QWidget):
         # For each shape (rectangle)
         for shape_data in shapes_data:
             # Calculate the center, width, and height of the shape
-            y_min, x_min = shape_data[0]
-            y_max, x_max = shape_data[2]
+            y_min, x_min = map(int, shape_data[0])
+            y_max, x_max = map(int, shape_data[2])
+
+            # Clip the coordinates to the image boundaries
+            y_min = np.clip(y_min, 0, image_height - 1)
+            y_max = np.clip(y_max, 0, image_height - 1)
+            x_min = np.clip(x_min, 0, image_width - 1)
+            x_max = np.clip(x_max, 0, image_width - 1)
+
             x_center = ((x_max + x_min) / 2) / image_width
             y_center = ((y_max + y_min) / 2) / image_height
             width = (x_max - x_min) / image_width
