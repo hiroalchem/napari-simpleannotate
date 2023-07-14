@@ -3,9 +3,9 @@ display_name: SimpleAnnotate
 contributions:
   commands:
     - id: napari-simpleannotate.make_bboxwidget
-      python_name: napari_simpleannotate._widget:ExampleQWidget
-      title: Make example QWidget
+      python_name: napari_simpleannotate._widget:BboxQWidget
+      title: Bbox annotation
 
   widgets:
-    - command: napari-simpleannotate.make_qwidget
-      display_name: Example QWidget
+    - command: napari-simpleannotate.make_bboxwidget
+      display_name: Bbox annotation
