@@ -1,12 +1,24 @@
+from functools import partial
 import os
 from typing import TYPE_CHECKING
 
 import numpy as np
 import skimage.io
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QFileDialog, QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget, QAbstractItemView
+from qtpy.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
+    QHBoxLayout,
+    QLineEdit,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+import yaml
 
-from ._utils import xywh2xyxy
+from ._utils import find_missing_number, xywh2xyxy, save_text
 
 if TYPE_CHECKING:
     import napari
@@ -29,18 +41,18 @@ class BboxQWidget(QWidget):
         self.open_dir_button = QPushButton("Open Directory", self)
         self.open_dir_button.clicked.connect(self.openDirectory)
 
-        # Create button for saving the bounding box annotations
-        self.save_button = QPushButton("Save Annotations", self)
-        self.save_button.clicked.connect(self.saveAnnotations)
-
         # Create a list widget for displaying the list of opened files
         self.listWidget = QListWidget()
         self.listWidget.itemClicked.connect(self.open_image)
 
+        # Create button for clear the list of opened files
+        self.clear_button = QPushButton("Clear list of opened files", self)
+        self.clear_button.clicked.connect(self.listWidget.clear)
+
         # Create a list widget for displaying the list of classes
         self.classlistWidget = QListWidget()
         self.classlistWidget.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.classlistWidget.itemClicked.connect(self.set_default_class)
+        self.classlistWidget.itemClicked.connect(self.class_clicked)
 
         # Create text box for entering the class names
         self.class_textbox = QLineEdit()
@@ -54,16 +66,23 @@ class BboxQWidget(QWidget):
         self.del_class_button = QPushButton("Delete selected class", self)
         self.del_class_button.clicked.connect(self.del_class)
 
+        # Create button for saving the bounding box annotations
+        self.save_button = QPushButton("Save Annotations", self)
+        self.save_button.clicked.connect(self.saveAnnotations)
+
         # Set the layout
         layout = QVBoxLayout()
-        layout.addWidget(self.open_file_button)
-        layout.addWidget(self.open_dir_button)
-        layout.addWidget(self.save_button)
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.open_file_button)
+        hbox.addWidget(self.open_dir_button)
+        layout.addLayout(hbox)
         layout.addWidget(self.listWidget)
+        layout.addWidget(self.clear_button)
         layout.addWidget(self.classlistWidget)
         layout.addWidget(self.class_textbox)
         layout.addWidget(self.add_class_button)
         layout.addWidget(self.del_class_button)
+        layout.addWidget(self.save_button)
         self.setLayout(layout)
 
     def initVariables(self):
@@ -72,48 +91,147 @@ class BboxQWidget(QWidget):
         self.text = {
             "string": "{class}",
             "anchor": "upper_left",
-            "translation": [-5, 0],
-            "size": 8,
+            "translation": [0, 0],
+            "size": 10,
             "color": "green",
         }
+        self.numbers = []
+        self.current_class_number = 0
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
         self.viewer.add_image(np.zeros((10, 10)), name="image_layer")
         self.viewer.add_shapes(name="bbox_layer", features=self.features, text=self.text)
+        # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
+
+    def class_clicked(self):
+        self.set_default_class()
+        # shapes layerのオブジェクトが選択されている場合に、それ（ら)のclassを変更する処理を記述してください。
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        selected_item = self.classlistWidget.selectedItems()[0]
+        if not selected_item:
+            return
 
     def set_default_class(self):
         """Sets the default class for the shapes layer."""
         shapes_layer = self.viewer.layers["bbox_layer"]
-        selected_items = self.classlistWidget.selectedItems()
-        if not selected_items:
+        selected_item = self.classlistWidget.selectedItems()[0]
+        if not selected_item:
             return
-        if len(selected_items) > 1:
-            print("Multiple classes selected")
-            return
-        for item in selected_items:
-            shapes_layer.feature_defaults = {"class": item.text()}
+        print(shapes_layer.feature_defaults)
+        shapes_layer.feature_defaults["class"] = selected_item.text()
+        print(type(shapes_layer.selected_data))
+        print(self.text)
 
     def add_class(self):
         """Adds the text in the class_textbox to the classlistWidget."""
         class_name = self.class_textbox.text()
         if class_name:
-            if class_name in self.features["class"]:
-                print("Class already exists")
-                return
+            exist_class_names = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+            if len(exist_class_names) == 0:
+                self.current_class_number = 0
+            else:
+                if class_name in exist_class_names:
+                    print("Class already exists")
+                    return
+                self.numbers = [int(name.split(":")[0]) for name in exist_class_names]
+                self.current_class_number = find_missing_number(self.numbers)
+                print("current class number:", self.current_class_number)
+                if self.current_class_number != len(exist_class_names):
+                    self.popup("numbering")
+            class_name = f"{self.current_class_number}: {class_name}"
             self.classlistWidget.addItem(class_name)
+            self.sort_classlist()
             self.class_textbox.clear()
-            self.features["class"].append(class_name)
+
+    def popup(self, message_type=None):
+        if message_type == "None":
+            return
+        popup = QMessageBox(self)
+        if message_type == "numbering":
+            popup.setWindowTitle("Numbering")
+            popup.setText(
+                f"Insert new class as item number {self.current_class_number} or append as the next highest number?"
+            )
+            popup.setStandardButtons(QMessageBox.Cancel | QMessageBox.No | QMessageBox.Yes)
+            popup.button(QMessageBox.No).setText("Append")
+            popup.button(QMessageBox.Yes).setText("Insert")
+            popup.buttonClicked.connect(self.on_popup_button_clicked_numbering)
+        elif message_type == "renumbering":
+            popup.setWindowTitle("Renumbering")
+            popup.setText(
+                "Do you want to renumber the classes? If you click 'Yes', the classes will be renumbered from 1. *Note that this will NOT change the class numbers in the existing annotations.*"
+            )
+            popup.setStandardButtons(QMessageBox.Cancel | QMessageBox.No | QMessageBox.Yes)
+            popup.buttonClicked.connect(self.on_popup_button_clicked_renumbering)
+        popup.exec_()
+
+    def on_popup_button_clicked_numbering(self, button):
+        if button.text() == "Insert":
+            return
+        elif button.text() == "Append":
+            self.current_class_number = max(self.numbers) + 1
+        elif button.text() == "Cancel":
+            self.current_class_number = 0
+        else:
+            self.current_class_number = 0
+
+    def on_popup_button_clicked_renumbering(self, button):
+        print(button.text())
+        if button.text() == "Cancel":
+            return
+        else:
+            selected_item = self.classlistWidget.selectedItems()[0]
+            self.classlistWidget.takeItem(self.classlistWidget.row(selected_item))
+            if button.text() == "&Yes":
+                self.sort_classlist(renumber=True)
+            else:
+                pass
+
+    def sort_classlist(self, renumber=False):
+        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+
+        def extract_number(item_text):
+            return int(item_text.split(":")[0].strip())
+
+        sorted_items_text = sorted(items_text, key=extract_number)
+
+        if renumber:
+            renumbered_items_text = []
+            for idx, item_text in enumerate(sorted_items_text):
+                _, text = item_text.split(":", 1)
+                renumbered_items_text.append(f"{idx}: {text.strip()}")
+            sorted_items_text = renumbered_items_text
+
+        self.classlistWidget.clear()
+        for item_text in sorted_items_text:
+            self.classlistWidget.addItem(item_text)
+
+    """
+    def add_size(self, layer, event):
+        # mouse click
+        yield
+        # mouse move
+        while event.type == "mouse_move":
+            yield
+        # mouse release
+        data = layer.data
+        coords = data[-1]
+        y1 = int(coords[0][0])
+        x1 = int(coords[0][1])
+        y2 = int(coords[2][0])
+        x2 = int(coords[2][1])
+        size = max(abs(y2 - y1), abs(x2 - x1))
+        layer.text.size = size
+        # if len(self.features["size"]) == len(data):
+        #    self.features["size"][-1] = size
+    """
 
     def del_class(self):
         """Deletes the selected class from the classlistWidget and the features dictionary."""
-        selected_items = self.classlistWidget.selectedItems()
-        if not selected_items:
+        if not self.classlistWidget.selectedItems():
             return
-        for item in selected_items:
-            class_name = item.text()
-            self.classlistWidget.takeItem(self.classlistWidget.row(item))
-            self.features["class"].remove(class_name)
+        self.popup("renumbering")
 
     def openFile(self):
         fname = QFileDialog.getOpenFileName(self, "Open file", "/")
@@ -145,6 +263,8 @@ class BboxQWidget(QWidget):
         image_layer.data = image
         image_layer.reset_contrast_limits()
 
+        classes = []
+
         txt_file = os.path.splitext(image_file)[0] + ".txt"
         if os.path.exists(txt_file):
             with open(txt_file, "r") as f:
@@ -156,8 +276,22 @@ class BboxQWidget(QWidget):
                         [x_center, y_center, width, height], scale=(image_width, image_height)
                     )
                     shapes_data.append([[y_min, x_min], [y_min, x_max], [y_max, x_max], [y_max, x_min]])
+                    # TODO: Add function to convert class_id to class name
+                    classes.append(str(int(class_id)))
                 shapes_layer = self.viewer.layers["bbox_layer"]
                 shapes_layer.data = shapes_data
+                shapes_layer.features["class"] = classes
+                exist_class_names = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+                self.numbers = [int(name.split(":")[0]) for name in exist_class_names]
+                # classesの番号がself.numbersにない場合、それを追加する処理
+                for class_id in classes:
+                    if int(class_id) not in self.numbers:
+                        self.classlistWidget.addItem(str(class_id) + ": ")
+                        self.numbers.append(int(class_id))
+                self.sort_classlist()
+                shapes_layer.refresh_text()
+                print(shapes_layer.features)
+                print(shapes_layer.text)
         else:
             shapes_layer = self.viewer.layers["bbox_layer"]
             shapes_layer.data = []
@@ -172,8 +306,6 @@ class BboxQWidget(QWidget):
         annotation_file = os.path.splitext(current_image_file)[0] + ".txt"
 
         shapes_layer = self.viewer.layers["bbox_layer"]
-        print(shapes_layer.feature_defaults)
-        print(shapes_layer.features)
         image_layer = self.viewer.layers["image_layer"]
         if image_layer.rgb:
             image_height, image_width, _ = image_layer.data.shape[-3:]
@@ -183,10 +315,13 @@ class BboxQWidget(QWidget):
 
         annotations = []
 
-        print(shapes_data)
+        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_dict = {item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text}
+        class_data = {"names": items_dict}
+        class_file = os.path.dirname(annotation_file) + "/class.yaml"
 
         # For each shape (rectangle)
-        for shape_data in shapes_data:
+        for i, shape_data in enumerate(shapes_data):
             # Calculate the center, width, and height of the shape
             y_min, x_min = map(int, shape_data[0])
             y_max, x_max = map(int, shape_data[2])
@@ -203,12 +338,58 @@ class BboxQWidget(QWidget):
             height = (y_max - y_min) / image_height
 
             # Append the annotation to the list
-            # TODO: Add support for multiple classes
-            annotations.append(f"0 {x_center} {y_center} {width} {height}")
+            # class_name = shapes_layer.features["class"][i].split(":")[1].strip()
+            # class_id = list(items_dict.keys())[list(items_dict.values()).index(class_name)]
+            class_id = shapes_layer.features["class"][i].split(":")[0].strip()
+            annotations.append(f"{class_id} {x_center} {y_center} {width} {height}")
 
         # Join all the annotations into a string
         annotations_str = "\n".join(annotations)
 
-        # Save the annotations to a file
-        with open(annotation_file, "w") as f:
-            f.write(annotations_str)
+        self.check_file(annotation_file, annotations_str, file_type="annotations")
+
+        if not os.path.isfile(class_file):
+            self.check_file(class_file, class_data, file_type="classlist")
+        with open("class.yaml", "r") as file:
+            prev_items_dict = yaml.safe_load(file)
+        if prev_items_dict != class_data:
+            self.check_file(class_file, class_data, file_type="classlist")
+
+    def check_file(self, filepath, file_str, file_type="annotations"):
+        popup = QMessageBox(self)
+        if file_type == "annotations":
+            popup.setWindowTitle("Save Annotations")
+        elif file_type == "classlist":
+            popup.setWindowTitle("Save Classlist")
+        else:
+            popup.setWindowTitle("Save File")
+
+        if os.path.isfile(filepath):
+            with open(filepath, "r") as f:
+                if f.read() == file_str:
+                    self.show_saved_popup(popup, filepath, file_str)
+                else:
+                    if file_type == "annotations":
+                        popup.setText("Do you want to overwrite the existing annotations?")
+                    elif file_type == "classlist":
+                        popup.setText("Do you want to overwrite the existing annotations?")
+                    else:
+                        popup.setText("Do you want to overwrite the existing file?")
+                    popup.setStandardButtons(QMessageBox.Cancel | QMessageBox.Yes)
+                    popup.button(QMessageBox.Yes).setText("Overwrite")
+                    popup.buttonClicked.connect(
+                        partial(self.on_popup_button_clicked_save, filepath, file_str, file_type)
+                    )
+                    popup.exec_()
+        else:
+            self.show_saved_popup(popup, filepath, file_str, file_type)
+
+    def on_popup_button_clicked_save(self, filepath, file_str, file_type, clicked_button):
+        if clicked_button.text() == "Overwrite":
+            save_text(filepath, file_str, file_type)
+
+    def show_saved_popup(self, popup, filepath, file_str, file_type):
+        save_text(filepath, file_str, file_type)
+        popup.setText("Saved")
+        popup.setStandardButtons(QMessageBox.Close)
+        popup.exec_()
