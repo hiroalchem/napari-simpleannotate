@@ -111,6 +111,11 @@ class BboxQWidget(QWidget):
         selected_item = self.classlistWidget.selectedItems()[0]
         if not selected_item:
             return
+        idxs = list(shapes_layer.selected_data)
+        if len(idxs) != 0:
+            class_name = selected_item.text()
+            shapes_layer.features.loc[idxs, "class"] = class_name
+            shapes_layer.refresh_text()
 
     def set_default_class(self):
         """Sets the default class for the shapes layer."""
