@@ -106,7 +106,7 @@ class BboxQWidget(QWidget):
 
     def class_clicked(self):
         self.set_default_class()
-        # shapes layerのオブジェクトが選択されている場合に、それ（ら)のclassを変更する処理を記述してください。
+        # change class if shapes are selected
         shapes_layer = self.viewer.layers["bbox_layer"]
         selected_item = self.classlistWidget.selectedItems()[0]
         if not selected_item:
