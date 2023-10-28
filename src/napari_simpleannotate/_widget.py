@@ -212,26 +212,6 @@ class BboxQWidget(QWidget):
         for item_text in sorted_items_text:
             self.classlistWidget.addItem(item_text)
 
-    """
-    def add_size(self, layer, event):
-        # mouse click
-        yield
-        # mouse move
-        while event.type == "mouse_move":
-            yield
-        # mouse release
-        data = layer.data
-        coords = data[-1]
-        y1 = int(coords[0][0])
-        x1 = int(coords[0][1])
-        y2 = int(coords[2][0])
-        x2 = int(coords[2][1])
-        size = max(abs(y2 - y1), abs(x2 - x1))
-        layer.text.size = size
-        # if len(self.features["size"]) == len(data):
-        #    self.features["size"][-1] = size
-    """
-
     def del_class(self):
         """Deletes the selected class from the classlistWidget and the features dictionary."""
         if not self.classlistWidget.selectedItems():
@@ -254,6 +234,23 @@ class BboxQWidget(QWidget):
             for image_file in image_files:
                 self.listWidget.addItem(os.path.join(dname, image_file))
 
+    def popup_load_class(self, class_data_from_yaml):
+        popup = QMessageBox(self)
+        popup.setWindowTitle("Load Classlist")
+        popup.setText("Do you want to load and overwrite the existing classlist?")
+        popup.setStandardButtons(QMessageBox.Cancel | QMessageBox.Yes)
+        popup.buttonClicked.connect(partial(self.on_popup_button_clicked_load_class, class_data_from_yaml))
+        popup.exec_()
+
+    def on_popup_button_clicked_load_class(self, class_data_from_yaml, clicked_button):
+        if clicked_button.text() == "Cancel":
+            return
+        else:
+            self.classlistWidget.clear()
+            for class_id, class_name in class_data_from_yaml["names"].items():
+                self.classlistWidget.addItem(f"{class_id}: {class_name}")
+            self.sort_classlist()
+
     def open_image(self, item):
         """Opens an image and updates the image layer in the napari viewer."""
         image_file = item.text()
@@ -270,6 +267,32 @@ class BboxQWidget(QWidget):
 
         classes = []
 
+        class_file = os.path.dirname(image_file) + "/class.yaml"
+        if os.path.isfile(class_file):
+            with open(class_file, "r") as file:
+                class_data_from_yaml = yaml.safe_load(file)
+            print(class_data_from_yaml)
+            if self.classlistWidget.count() != 0:
+                items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+                items_dict = {
+                    int(item_text.split(":")[0].strip()): item_text.split(":")[1].strip() for item_text in items_text
+                }
+                class_data = {"names": items_dict}
+                if class_data_from_yaml != class_data:
+                    self.popup_load_class(class_data_from_yaml)
+                else:
+                    pass
+            else:
+                for class_id, class_name in class_data_from_yaml["names"].items():
+                    self.classlistWidget.addItem(f"{class_id}: {class_name}")
+            self.sort_classlist()
+        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        self.numbers = [int(name.split(":")[0]) for name in items_text]
+
+        items_dict_with_no = {
+            item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text
+        }
+
         txt_file = os.path.splitext(image_file)[0] + ".txt"
         if os.path.exists(txt_file):
             with open(txt_file, "r") as f:
@@ -282,17 +305,16 @@ class BboxQWidget(QWidget):
                     )
                     shapes_data.append([[y_min, x_min], [y_min, x_max], [y_max, x_max], [y_max, x_min]])
                     # TODO: Add function to convert class_id to class name
-                    classes.append(str(int(class_id)))
+                    if str(int(class_id)) in items_dict_with_no.keys():
+                        classes.append(str(int(class_id)) + ": " + items_dict_with_no[str(int(class_id))])
+                    else:
+                        self.classlistWidget.addItem(str(int(class_id)) + ": ")
+                        items_dict_with_no[str(int(class_id))] = ""
+                        self.numbers.append(int(class_id))
+                        classes.append(str(int(class_id)) + ": ")
                 shapes_layer = self.viewer.layers["bbox_layer"]
                 shapes_layer.data = shapes_data
                 shapes_layer.features["class"] = classes
-                exist_class_names = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
-                self.numbers = [int(name.split(":")[0]) for name in exist_class_names]
-                # classesの番号がself.numbersにない場合、それを追加する処理
-                for class_id in classes:
-                    if int(class_id) not in self.numbers:
-                        self.classlistWidget.addItem(str(class_id) + ": ")
-                        self.numbers.append(int(class_id))
                 self.sort_classlist()
                 shapes_layer.refresh_text()
                 print(shapes_layer.features)
@@ -321,9 +343,9 @@ class BboxQWidget(QWidget):
         annotations = []
 
         items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
-        items_dict = {item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text}
+        items_dict = {int(item_text.split(":")[0].strip()): item_text.split(":")[1].strip() for item_text in items_text}
         class_data = {"names": items_dict}
-        class_file = os.path.dirname(annotation_file) + "/class.yaml"
+        class_file = os.path.join(os.path.dirname(annotation_file), "class.yaml")
 
         # For each shape (rectangle)
         for i, shape_data in enumerate(shapes_data):
@@ -355,7 +377,7 @@ class BboxQWidget(QWidget):
 
         if not os.path.isfile(class_file):
             self.check_file(class_file, class_data, file_type="classlist")
-        with open("class.yaml", "r") as file:
+        with open(class_file, "r") as file:
             prev_items_dict = yaml.safe_load(file)
         if prev_items_dict != class_data:
             self.check_file(class_file, class_data, file_type="classlist")
@@ -372,12 +394,12 @@ class BboxQWidget(QWidget):
         if os.path.isfile(filepath):
             with open(filepath, "r") as f:
                 if f.read() == file_str:
-                    self.show_saved_popup(popup, filepath, file_str)
+                    self.show_saved_popup(popup, filepath, file_str, file_type)
                 else:
                     if file_type == "annotations":
                         popup.setText("Do you want to overwrite the existing annotations?")
                     elif file_type == "classlist":
-                        popup.setText("Do you want to overwrite the existing annotations?")
+                        popup.setText("Do you want to overwrite the existing classlist?")
                     else:
                         popup.setText("Do you want to overwrite the existing file?")
                     popup.setStandardButtons(QMessageBox.Cancel | QMessageBox.Yes)
@@ -395,6 +417,6 @@ class BboxQWidget(QWidget):
 
     def show_saved_popup(self, popup, filepath, file_str, file_type):
         save_text(filepath, file_str, file_type)
-        popup.setText("Saved")
+        popup.setText(f"{file_type} saved")
         popup.setStandardButtons(QMessageBox.Close)
         popup.exec_()

@@ -42,7 +42,7 @@ def save_text(filepath, text, file_type):
         with open(filepath, "w") as f:
             f.write(text)
     elif file_type == "classlist":
-        with open("class.yaml", "w") as file:
-            yaml.dump(text, filepath, default_flow_style=False)
+        with open(filepath, "w") as file:
+            yaml.dump(text, file, default_flow_style=False)
     else:
-        pass
+        raise ValueError(f"Invalid file_type: {file_type}")
