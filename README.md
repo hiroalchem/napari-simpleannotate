@@ -34,6 +34,26 @@ To install latest development version :
     pip install git+https://github.com/hiroalchem/napari-simpleannotate.git
 
 
+## How to use
+
+1. **Opening Files or Directories**:
+   - Click the `Open File` button to open an image file.
+   - Click the `Open Directory` button to open a directory containing images.
+   - If there's a `class.yaml` in the directory of the selected file or within the selected directory, it will be automatically detected. A popup will appear, giving you the option to load it.
+
+2. **Class Management**:
+   - Enter the class name in the textbox and click the `Add class` button to add a class. When adding a class name, a number is automatically assigned to it. This number will be used when saving annotations.
+   - Select a class from the class list and click the `Delete selected class` button to remove it.
+
+3. **Annotating Images**:
+   - Use napari's rectangle tool to annotate the images. If you have a class selected, the annotation will automatically be assigned to that class.
+   - For existing rectangles, you can change their class by selecting the rectangle and then choosing a different class from the list.
+
+4. **Saving Annotations**:
+   - Click the `Save Annotations` button to save the annotations in YOLO format.
+   - Along with saving the annotations, the `class.yaml` will also be saved. If a `class.yaml` already exists and its content is different from the current one, a popup will appear asking for confirmation to overwrite it.
+
+
 ## Contributing
 
 Contributions are very welcome. Tests can be run with [tox], please ensure
