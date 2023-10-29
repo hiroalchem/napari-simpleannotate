@@ -21,6 +21,9 @@ and review the napari docs for plugin developers:
 https://napari.org/stable/plugins/index.html
 -->
 
+![overview](./images/dog_and_cat.jpg)
+
+
 ## Installation
 
 You can install `napari-simpleannotate` via [pip]:
