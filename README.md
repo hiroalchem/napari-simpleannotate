@@ -21,7 +21,7 @@ and review the napari docs for plugin developers:
 https://napari.org/stable/plugins/index.html
 -->
 
-![overview](./images/dog_and_cat.jpg)
+![overview](https://github.com/hiroalchem/napari-simpleannotate/raw/main/images/dog_and_cat.jpg)
 
 
 ## Installation
