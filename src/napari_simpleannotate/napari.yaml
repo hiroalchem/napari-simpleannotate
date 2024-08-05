@@ -3,7 +3,7 @@ display_name: SimpleAnnotate
 contributions:
   commands:
     - id: napari-simpleannotate.make_bboxwidget
-      python_name: napari_simpleannotate._widget:BboxQWidget
+      python_name: napari_simpleannotate._bbox_widget:BboxQWidget
       title: Bbox annotation
 
   widgets:

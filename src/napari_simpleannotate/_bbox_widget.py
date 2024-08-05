@@ -361,8 +361,8 @@ class BboxQWidget(QWidget):
 
             x_center = ((x_max + x_min) / 2) / image_width
             y_center = ((y_max + y_min) / 2) / image_height
-            width = (x_max - x_min) / image_width
-            height = (y_max - y_min) / image_height
+            width = abs((x_max - x_min) / image_width)
+            height = abs((y_max - y_min) / image_height)
 
             # Append the annotation to the list
             # class_name = shapes_layer.features["class"][i].split(":")[1].strip()
