@@ -1,36 +1,50 @@
 import numpy as np
 
-from napari_simpleannotate import ExampleQWidget, example_magic_widget
+from napari_simpleannotate import BboxQWidget, LabelImgQWidget, BboxVideoQWidget
 
 
-# make_napari_viewer is a pytest fixture that returns a napari viewer object
-# capsys is a pytest fixture that captures stdout and stderr output streams
-def test_example_q_widget(make_napari_viewer, capsys):
-    # make viewer and add an image layer using our fixture
+def test_all_widgets_can_be_imported():
+    """Test that all widgets can be imported without errors."""
+    assert BboxQWidget is not None
+    assert LabelImgQWidget is not None
+    assert BboxVideoQWidget is not None
+
+
+def test_all_widgets_can_be_instantiated(make_napari_viewer):
+    """Test that all widgets can be instantiated with a napari viewer."""
     viewer = make_napari_viewer()
-    viewer.add_image(np.random.random((100, 100)))
+    
+    # Test BboxQWidget
+    bbox_widget = BboxQWidget(viewer)
+    assert bbox_widget.viewer == viewer
+    
+    # Test LabelImgQWidget
+    labelimg_widget = LabelImgQWidget(viewer)
+    assert labelimg_widget.viewer == viewer
+    
+    # Test BboxVideoQWidget
+    video_widget = BboxVideoQWidget(viewer)
+    assert video_widget.viewer == viewer
 
-    # create our widget, passing in the viewer
-    my_widget = ExampleQWidget(viewer)
 
-    # call our widget method
-    my_widget._on_click()
-
-    # read captured output and check that it's as we expected
-    captured = capsys.readouterr()
-    assert captured.out == "napari has 1 layers\n"
-
-
-def test_example_magic_widget(make_napari_viewer, capsys):
+def test_widgets_have_required_attributes(make_napari_viewer):
+    """Test that all widgets have the required basic attributes."""
     viewer = make_napari_viewer()
-    layer = viewer.add_image(np.random.random((100, 100)))
-
-    # this time, our widget will be a MagicFactory or FunctionGui instance
-    my_widget = example_magic_widget()
-
-    # if we "call" this object, it'll execute our function
-    my_widget(viewer.layers[0])
-
-    # read captured output and check that it's as we expected
-    captured = capsys.readouterr()
-    assert captured.out == f"you have selected {layer}\n"
+    
+    widgets = [
+        BboxQWidget(viewer),
+        LabelImgQWidget(viewer),
+        BboxVideoQWidget(viewer)
+    ]
+    
+    for widget in widgets:
+        # All widgets should have these basic attributes
+        assert hasattr(widget, 'viewer')
+        assert hasattr(widget, 'classlistWidget')
+        assert hasattr(widget, 'class_textbox')
+        
+        # All widgets should have these methods
+        assert hasattr(widget, 'initUI')
+        assert hasattr(widget, 'initVariables') 
+        assert hasattr(widget, 'initLayers')
+        assert callable(getattr(widget, 'add_class', None))
