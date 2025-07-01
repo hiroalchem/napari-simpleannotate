@@ -24,10 +24,10 @@ if TYPE_CHECKING:
     import napari
 
 try:
-    from napari_video.napari_video import VideoReaderNP
-    HAS_NAPARI_VIDEO = True
+    import av
+    HAS_PYAV = True
 except ImportError:
-    HAS_NAPARI_VIDEO = False
+    HAS_PYAV = False
 
 
 class BboxVideoQWidget(QWidget):
@@ -110,8 +110,8 @@ class BboxVideoQWidget(QWidget):
 
     def openVideo(self):
         """Open video file using file dialog."""
-        if not HAS_NAPARI_VIDEO:
-            QMessageBox.warning(self, "Error", "napari-video plugin is required to load videos.\nPlease install it with: pip install napari-video")
+        if not HAS_PYAV:
+            QMessageBox.warning(self, "Error", "PyAV is required to load videos.\nPlease install it with: pip install av")
             return
             
         fname = QFileDialog.getOpenFileName(
@@ -127,8 +127,8 @@ class BboxVideoQWidget(QWidget):
     def load_video(self, video_path):
         """Load video file and initialize annotations."""
         try:
-            # Load video using napari-video
-            video_reader = VideoReaderNP(video_path)
+            # Load video using PyAV
+            video_frames = self.load_video_with_pyav(video_path)
             
             # Remove existing video layers
             layers_to_remove = []
@@ -140,13 +140,13 @@ class BboxVideoQWidget(QWidget):
                 if layer_name in self.viewer.layers:
                     del self.viewer.layers[layer_name]
             
-            # Add video layer
-            self.viewer.add_image(video_reader, name="video_layer")
+            # Add video layer (as time series)
+            self.viewer.add_image(video_frames, name="video_layer")
             
             # Store video information
             self.video_path = video_path
             self.video_dir = os.path.dirname(video_path)
-            self.total_frames = len(video_reader)
+            self.total_frames = len(video_frames)
             self.current_frame = 0
             
             # Update UI
@@ -162,6 +162,21 @@ class BboxVideoQWidget(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load video: {str(e)}")
+
+    def load_video_with_pyav(self, video_path):
+        """Load video frames using PyAV."""
+        container = av.open(video_path)
+        frames = []
+        
+        for frame in container.decode(video=0):
+            # Convert frame to numpy array
+            img = frame.to_ndarray(format='rgb24')
+            frames.append(img)
+        
+        container.close()
+        
+        # Convert to numpy array with shape (T, H, W, C)
+        return np.array(frames)
 
     def on_frame_changed(self, event):
         """Handle frame change events."""

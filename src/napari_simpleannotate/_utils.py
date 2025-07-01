@@ -28,6 +28,9 @@ def find_missing_number(nums: List[int]) -> int:
     Returns:
         int: The smallest missing positive integer in the list.
     """
+    if not nums:  # Handle empty list
+        return 0
+    
     nums.sort()
     if nums[0] != 0:
         return 0

@@ -55,7 +55,9 @@ def test_xywh2xyxy_basic():
     
     # Expected: x1=40, y1=35, x2=60, y2=65
     expected = [40.0, 35.0, 60.0, 65.0]
-    assert result == expected
+    # Use pytest.approx for floating point comparison
+    import pytest
+    assert result == pytest.approx(expected)
 
 
 def test_xywh2xyxy_different_scales():
@@ -67,7 +69,8 @@ def test_xywh2xyxy_different_scales():
     
     # Expected: x1=60, y1=40, x2=140, y2=60
     expected = [60.0, 40.0, 140.0, 60.0]
-    assert result == expected
+    import pytest
+    assert result == pytest.approx(expected)
 
 
 def test_xywh2xyxy_edge_cases():

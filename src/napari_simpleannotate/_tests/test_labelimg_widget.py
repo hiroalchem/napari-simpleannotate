@@ -124,10 +124,11 @@ def test_load_class_file(make_napari_viewer):
         widget.target_dir = temp_dir
         widget.load_class_file()
         
-        # Check that classes were loaded
+        # Check that classes were loaded to the internal list
         assert "cat" in widget.classlist
         assert "dog" in widget.classlist
         assert "bird" in widget.classlist
+        # Check that the widget was updated
         assert widget.classlistWidget.count() == 3
 
 

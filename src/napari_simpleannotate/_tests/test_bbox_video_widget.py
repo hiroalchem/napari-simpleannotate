@@ -53,9 +53,10 @@ def test_add_duplicate_class(make_napari_viewer):
     widget = BboxVideoQWidget(viewer)
     
     # Add a class first
-    widget.classlistWidget.addItem("0: person")
+    widget.class_textbox.setText("person")
+    widget.add_class()
     
-    # Try to add the same class
+    # Try to add the same class again
     widget.class_textbox.setText("person")
     
     with patch('qtpy.QtWidgets.QMessageBox.information') as mock_info:
@@ -155,7 +156,7 @@ def test_save_classes(make_napari_viewer):
 
 
 @patch('qtpy.QtWidgets.QFileDialog.getOpenFileName')
-@patch('napari_simpleannotate._bbox_video_widget.HAS_NAPARI_VIDEO', True)
+@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', True)
 def test_open_video_no_file_selected(mock_dialog, make_napari_viewer):
     """Test opening video when no file is selected."""
     viewer = make_napari_viewer()
@@ -170,9 +171,9 @@ def test_open_video_no_file_selected(mock_dialog, make_napari_viewer):
     assert widget.video_path == ""
 
 
-@patch('napari_simpleannotate._bbox_video_widget.HAS_NAPARI_VIDEO', False)
-def test_open_video_no_napari_video(make_napari_viewer):
-    """Test opening video when napari-video is not available."""
+@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', False)
+def test_open_video_no_pyav(make_napari_viewer):
+    """Test opening video when PyAV is not available."""
     viewer = make_napari_viewer()
     widget = BboxVideoQWidget(viewer)
     
@@ -246,10 +247,9 @@ def test_layers_initialization(make_napari_viewer):
     assert bbox_layer.text == widget.text
 
 
-@patch('napari_simpleannotate._bbox_video_widget.VideoReaderNP')
 @patch('qtpy.QtWidgets.QFileDialog.getOpenFileName')
-@patch('napari_simpleannotate._bbox_video_widget.HAS_NAPARI_VIDEO', True)
-def test_load_video_success(mock_dialog, mock_video_reader, make_napari_viewer):
+@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', True)
+def test_load_video_success(mock_dialog, make_napari_viewer):
     """Test successful video loading."""
     viewer = make_napari_viewer()
     widget = BboxVideoQWidget(viewer)
@@ -257,18 +257,20 @@ def test_load_video_success(mock_dialog, mock_video_reader, make_napari_viewer):
     # Setup mocks
     test_video_path = "/path/to/test.mp4"
     mock_dialog.return_value = (test_video_path, "")
-    mock_reader_instance = MagicMock()
-    mock_reader_instance.__len__.return_value = 100  # 100 frames
-    mock_video_reader.return_value = mock_reader_instance
     
-    with patch.object(widget, 'load_classes') as mock_load_classes:
-        with patch.object(widget, 'load_annotations') as mock_load_annotations:
-            widget.openVideo()
+    # Mock the PyAV loading
+    mock_frames = np.random.randint(0, 255, (100, 480, 640, 3), dtype=np.uint8)
+    
+    with patch.object(widget, 'load_video_with_pyav', return_value=mock_frames) as mock_load_pyav:
+        with patch.object(widget, 'load_classes') as mock_load_classes:
+            with patch.object(widget, 'load_annotations') as mock_load_annotations:
+                widget.openVideo()
     
     # Check that video was loaded
     assert widget.video_path == test_video_path
     assert widget.video_dir == "/path/to"
     assert widget.total_frames == 100
     assert "test.mp4" in widget.video_info_label.text()
+    mock_load_pyav.assert_called_once_with(test_video_path)
     mock_load_classes.assert_called_once()
     mock_load_annotations.assert_called_once()
