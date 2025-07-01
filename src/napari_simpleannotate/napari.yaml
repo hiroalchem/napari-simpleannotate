@@ -5,7 +5,17 @@ contributions:
     - id: napari-simpleannotate.make_bboxwidget
       python_name: napari_simpleannotate._bbox_widget:BboxQWidget
       title: Bbox annotation
+    - id: napari-simpleannotate.make_labelimgwidget
+      python_name: napari_simpleannotate._labelimg_widget:LabelImgQWidget
+      title: Label image classification
+    - id: napari-simpleannotate.make_bboxvideowidget
+      python_name: napari_simpleannotate._bbox_video_widget:BboxVideoQWidget
+      title: Bbox video annotation
 
   widgets:
     - command: napari-simpleannotate.make_bboxwidget
       display_name: Bbox annotation
+    - command: napari-simpleannotate.make_labelimgwidget
+      display_name: Label image classification
+    - command: napari-simpleannotate.make_bboxvideowidget
+      display_name: Bbox video annotation
