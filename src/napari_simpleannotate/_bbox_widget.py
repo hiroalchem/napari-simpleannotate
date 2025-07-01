@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QCheckBox,
 )
 import yaml
 
@@ -43,11 +44,14 @@ class BboxQWidget(QWidget):
 
         # Create a list widget for displaying the list of opened files
         self.listWidget = QListWidget()
-        self.listWidget.itemClicked.connect(self.open_image)
+        self.listWidget.currentItemChanged.connect(self.open_image)
 
         # Create button for clear the list of opened files
         self.clear_button = QPushButton("Clear list of opened files", self)
         self.clear_button.clicked.connect(self.listWidget.clear)
+
+        # Add the "Keep Contrast" checkbox
+        self.keep_contrast_checkbox = QCheckBox("Keep Contrast", self)
 
         # Create a list widget for displaying the list of classes
         self.classlistWidget = QListWidget()
@@ -78,6 +82,7 @@ class BboxQWidget(QWidget):
         layout.addLayout(hbox)
         layout.addWidget(self.listWidget)
         layout.addWidget(self.clear_button)
+        layout.addWidget(self.keep_contrast_checkbox)
         layout.addWidget(self.classlistWidget)
         layout.addWidget(self.class_textbox)
         layout.addWidget(self.add_class_button)
@@ -97,6 +102,7 @@ class BboxQWidget(QWidget):
         }
         self.numbers = []
         self.current_class_number = 0
+        self.previous_contrast_limits = None
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
@@ -105,28 +111,19 @@ class BboxQWidget(QWidget):
         # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
 
     def class_clicked(self):
-        self.set_default_class()
-        # change class if shapes are selected
         shapes_layer = self.viewer.layers["bbox_layer"]
         selected_item = self.classlistWidget.selectedItems()[0]
         if not selected_item:
             return
+        print("previous default class:", shapes_layer.feature_defaults["class"])
+        shapes_layer.feature_defaults["class"] = selected_item.text()
+        print("current default class:", shapes_layer.feature_defaults["class"])
         idxs = list(shapes_layer.selected_data)
+        # change class if shapes are selected
         if len(idxs) != 0:
             class_name = selected_item.text()
             shapes_layer.features.loc[idxs, "class"] = class_name
             shapes_layer.refresh_text()
-
-    def set_default_class(self):
-        """Sets the default class for the shapes layer."""
-        shapes_layer = self.viewer.layers["bbox_layer"]
-        selected_item = self.classlistWidget.selectedItems()[0]
-        if not selected_item:
-            return
-        print(shapes_layer.feature_defaults)
-        shapes_layer.feature_defaults["class"] = selected_item.text()
-        print(type(shapes_layer.selected_data))
-        print(self.text)
 
     def add_class(self):
         """Adds the text in the class_textbox to the classlistWidget."""
@@ -251,9 +248,13 @@ class BboxQWidget(QWidget):
                 self.classlistWidget.addItem(f"{class_id}: {class_name}")
             self.sort_classlist()
 
-    def open_image(self, item):
+    def open_image(self, current_item, previous_item=None):
+        self.previous_contrast_limits = self.viewer.layers["image_layer"].contrast_limits
         """Opens an image and updates the image layer in the napari viewer."""
-        image_file = item.text()
+        if current_item is None:
+            return  # If there is no current item selected, exit
+
+        image_file = current_item.text()
         image = skimage.io.imread(image_file)
         rgb = image.shape[-1] in (3, 4)
         if rgb:
@@ -264,6 +265,9 @@ class BboxQWidget(QWidget):
         image_layer.rgb = rgb
         image_layer.data = image
         image_layer.reset_contrast_limits()
+        # If the "Keep Contrast" checkbox is checked and we have previous limits, apply them
+        if self.keep_contrast_checkbox.isChecked() and self.previous_contrast_limits is not None:
+            image_layer.contrast_limits = self.previous_contrast_limits
 
         classes = []
 
@@ -299,7 +303,9 @@ class BboxQWidget(QWidget):
                 lines = f.readlines()
                 shapes_data = []
                 for line in lines:
-                    class_id, x_center, y_center, width, height = map(float, line.strip().split())
+                    class_id, x_center, y_center, width, height = line.strip().split()
+                    class_id = int(class_id)
+                    x_center, y_center, width, height = map(float, [x_center, y_center, width, height])
                     x_min, y_min, x_max, y_max = xywh2xyxy(
                         [x_center, y_center, width, height], scale=(image_width, image_height)
                     )
