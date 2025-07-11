@@ -7,7 +7,11 @@
 [![codecov](https://codecov.io/gh/hiroalchem/napari-simpleannotate/branch/main/graph/badge.svg)](https://codecov.io/gh/hiroalchem/napari-simpleannotate)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-simpleannotate)](https://napari-hub.org/plugins/napari-simpleannotate)
 
-A simple plugin to label image
+A napari plugin for simple image and video annotation that provides three main annotation workflows:
+
+1. **Bounding Box Annotation (YOLO format)**: For object detection training data on images
+2. **Video Bounding Box Annotation**: For object detection training data on video files
+3. **Image Classification Labeling**: For image classification training data
 
 ----------------------------------
 
@@ -39,6 +43,8 @@ To install latest development version :
 
 ## How to use
 
+### Bounding Box Annotation (for images)
+
 1. **Opening Files or Directories**:
    - Click the `Open File` button to open an image file.
    - Click the `Open Directory` button to open a directory containing images.
@@ -55,6 +61,54 @@ To install latest development version :
 4. **Saving Annotations**:
    - Click the `Save Annotations` button to save the annotations in YOLO format.
    - Along with saving the annotations, the `class.yaml` will also be saved. If a `class.yaml` already exists and its content is different from the current one, a popup will appear asking for confirmation to overwrite it.
+
+### Video Bounding Box Annotation
+
+1. **Opening Videos**:
+   - Click the `Open Video` button to open a video file (supports MP4, AVI, MOV, MKV, WMV, FLV, WebM formats).
+   - The video will be loaded and displayed in napari's time-aware viewer.
+
+2. **Navigation**:
+   - Use napari's time slider to navigate between frames.
+   - Current frame information is displayed in the widget.
+
+3. **Class Management**:
+   - Same as image annotation: add/delete classes with automatic ID assignment.
+   - Classes are saved to `class.yaml` in the video directory.
+
+4. **Annotating Videos**:
+   - Navigate to the desired frame using the time slider.
+   - Use napari's rectangle tool to create bounding boxes.
+   - Each annotation automatically includes the current frame number.
+   - Annotations are frame-aware and will only be visible on their respective frames.
+
+5. **Saving Annotations**:
+   - Click `Save Annotations` to save annotations in extended YOLO format.
+   - Annotations are saved as `video_name.txt` with format: `class_id frame x_center y_center width height`
+   - Frame images are automatically extracted and saved alongside annotations.
+
+### Image Classification Labeling
+
+1. **Opening Directory**:
+   - Click the `Open Directory` button to select a directory containing images.
+   - Supported formats: PNG, TIF, JPG, JPEG, TIFF (recursive search).
+
+2. **Display Options**:
+   - Check `Split Channels` to display multi-channel images as separate layers.
+   - Contrast settings are preserved when switching between images.
+
+3. **Class Management**:
+   - Enter class names in the text box and press Enter to add/remove classes.
+   - Classes are automatically saved to `class.txt` in the target directory.
+
+4. **Labeling Workflow**:
+   - Select an image from the file list to display it.
+   - Click on a class name to assign that label to the current image.
+   - Labels are automatically saved to `labels.csv` in real-time.
+
+5. **Resume Capability**:
+   - Previous labels and classes are automatically loaded when reopening a directory.
+   - The workflow can be resumed from where you left off.
 
 
 ## Contributing
