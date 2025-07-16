@@ -83,7 +83,7 @@ class BboxVideoQWidget(QWidget):
         self.text = {
             "string": "{class}",
             "anchor": "upper_left",
-            "translation": np.array([0, 0]),
+            "translation": np.array([0, 0, 0]),
             "size": 10,
             "color": "green",
             "visible": True,
