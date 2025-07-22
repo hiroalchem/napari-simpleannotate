@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "napari-simpleannotate"
 description = "A napari plugin for simple image and video annotation"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = {text = "BSD-3-Clause"}
 authors = [
     {name = "Hiroki Kawai", email = "h.kawai888@gmail.com"},
 ]
