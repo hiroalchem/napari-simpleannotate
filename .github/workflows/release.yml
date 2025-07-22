@@ -150,14 +150,12 @@ jobs:
         prerelease: false
     
     - name: Upload Release Assets
-      uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: dist/
-        asset_name: napari-simpleannotate-${{ steps.changelog.outputs.version }}-dist
-        asset_content_type: application/zip
+      run: |
+        for file in dist/*; do
+          gh release upload "${{ steps.tag.outputs.tag }}" "$file" --clobber
+        done
 
   publish-pypi:
     needs: [test, build, create-release]
