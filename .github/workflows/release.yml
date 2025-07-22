@@ -138,24 +138,13 @@ jobs:
         } >> $GITHUB_OUTPUT
     
     - name: Create GitHub Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ steps.tag.outputs.tag }}
-        release_name: Release ${{ steps.tag.outputs.tag }}
-        body: ${{ steps.changelog.outputs.changelog }}
-        draft: false
-        prerelease: false
-    
-    - name: Upload Release Assets
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        for file in dist/*; do
-          gh release upload "${{ steps.tag.outputs.tag }}" "$file" --clobber
-        done
+        gh release create "${{ steps.tag.outputs.tag }}" \
+          --title "Release ${{ steps.tag.outputs.tag }}" \
+          --notes "${{ steps.changelog.outputs.changelog }}" \
+          dist/*
 
   publish-pypi:
     needs: [test, build, create-release]
