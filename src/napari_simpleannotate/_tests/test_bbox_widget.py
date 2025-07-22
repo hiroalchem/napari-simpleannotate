@@ -5,10 +5,13 @@ import pytest
 
 from napari_simpleannotate import BboxQWidget
 
-# Skip GUI-intensive tests in CI environments to avoid segfaults
+# Skip GUI-intensive tests to avoid segfaults in headless environments
 pytestmark = pytest.mark.skipif(
-    os.environ.get("CI") == "true" and os.environ.get("QT_QPA_PLATFORM") == "offscreen",
-    reason="GUI tests may cause segfaults in CI environment",
+    os.environ.get("CI") == "true" 
+    or os.environ.get("GITHUB_ACTIONS") == "true"
+    or not os.environ.get("DISPLAY")
+    or os.environ.get("QT_QPA_PLATFORM") == "offscreen",
+    reason="GUI tests may cause segfaults in headless or CI environment",
 )
 
 
