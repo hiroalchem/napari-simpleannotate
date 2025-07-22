@@ -43,72 +43,102 @@ To install latest development version :
 
 ## How to use
 
-### Bounding Box Annotation (for images)
+### Getting Started
 
-1. **Opening Files or Directories**:
-   - Click the `Open File` button to open an image file.
-   - Click the `Open Directory` button to open a directory containing images.
-   - If there's a `class.yaml` in the directory of the selected file or within the selected directory, it will be automatically detected. A popup will appear, giving you the option to load it.
+After installing napari-simpleannotate, launch napari and navigate to `Plugins > Add dock widget` to find three annotation widgets:
+
+- **Bbox annotation**: For bounding box annotation on images
+- **Bbox video annotation**: For bounding box annotation on video files  
+- **Label image classification**: For image classification labeling
+
+### Bounding Box Annotation (Images)
+
+**Prerequisites**: None required
+
+1. **Opening Files**:
+   - Single file: Click `Open File` to select an image file
+   - Directory: Click `Open Directory` to select a folder containing images
+   - If a `class.yaml` file exists in the directory, you'll be prompted to load existing classes
 
 2. **Class Management**:
-   - Enter the class name in the textbox and click the `Add class` button to add a class. When adding a class name, a number is automatically assigned to it. This number will be used when saving annotations.
-   - Select a class from the class list and click the `Delete selected class` button to remove it.
+   - Enter class names in the text box and click `Add class`
+   - Classes are automatically assigned sequential IDs (0, 1, 2, ...)
+   - Select a class and click `Delete selected class` to remove it
+   - Classes are saved to `class.yaml` alongside annotations
 
-3. **Annotating Images**:
-   - Use napari's rectangle tool to annotate the images. If you have a class selected, the annotation will automatically be assigned to that class.
-   - For existing rectangles, you can change their class by selecting the rectangle and then choosing a different class from the list.
+3. **Creating Annotations**:
+   - Select a class from the list (becomes your active class)
+   - Use napari's rectangle tool (shortcut: R) to draw bounding boxes
+   - New rectangles automatically inherit the selected class
+   - Change existing rectangles: select the shape, then click a different class
 
-4. **Saving Annotations**:
-   - Click the `Save Annotations` button to save the annotations in YOLO format.
-   - Along with saving the annotations, the `class.yaml` will also be saved. If a `class.yaml` already exists and its content is different from the current one, a popup will appear asking for confirmation to overwrite it.
+4. **Saving Work**:
+   - Click `Save Annotations` to export in YOLO format
+   - Files saved: `image_name.txt` (YOLO coordinates) + `class.yaml` (class definitions)
+   - YOLO format: `class_id x_center y_center width height` (normalized 0-1)
 
 ### Video Bounding Box Annotation
 
+**Prerequisites**: Install PyAV for video support: `pip install av`
+
 1. **Opening Videos**:
-   - Click the `Open Video` button to open a video file (supports MP4, AVI, MOV, MKV, WMV, FLV, WebM formats).
-   - The video will be loaded and displayed in napari's time-aware viewer.
+   - Click `Open Video` to select video files
+   - Supported formats: MP4, AVI, MOV, MKV, WMV, FLV, WebM
+   - Video loads with frame-by-frame navigation
 
 2. **Navigation**:
-   - Use napari's time slider to navigate between frames.
-   - Current frame information is displayed in the widget.
+   - Use napari's time slider to navigate frames
+   - Frame counter shows current position: "Frame: X/Y"
+   - Video performance optimized with LRU cache and parallel prefetching
 
-3. **Class Management**:
-   - Same as image annotation: add/delete classes with automatic ID assignment.
-   - Classes are saved to `class.yaml` in the video directory.
+3. **Frame-Aware Annotation**:
+   - Navigate to target frame before annotating
+   - Create bounding boxes with napari's rectangle tool
+   - Each annotation automatically records the current frame number
+   - Annotations only visible on their respective frames
 
-4. **Annotating Videos**:
-   - Navigate to the desired frame using the time slider.
-   - Use napari's rectangle tool to create bounding boxes.
-   - Each annotation automatically includes the current frame number.
-   - Annotations are frame-aware and will only be visible on their respective frames.
-
-5. **Saving Annotations**:
-   - Click `Save Annotations` to save annotations in extended YOLO format.
-   - Annotations are saved as `video_name.txt` with format: `class_id frame x_center y_center width height`
-   - Frame images are automatically extracted and saved alongside annotations.
+4. **Class and Export**:
+   - Class management identical to image annotation
+   - Extended YOLO format: `class_id frame x_center y_center width height`
+   - Saves to `video_name.txt` + `class.yaml` in video directory
 
 ### Image Classification Labeling
 
+**Prerequisites**: None required
+
 1. **Opening Directory**:
-   - Click the `Open Directory` button to select a directory containing images.
-   - Supported formats: PNG, TIF, JPG, JPEG, TIFF (recursive search).
+   - Click `Open Directory` to select image folder
+   - Recursively finds all images (PNG, TIF, JPG, JPEG, TIFF)
+   - Automatically loads existing `labels.csv` and `class.txt` if present
 
 2. **Display Options**:
-   - Check `Split Channels` to display multi-channel images as separate layers.
-   - Contrast settings are preserved when switching between images.
+   - **Split Channels**: Check to display multi-channel images as separate layers
+   - Contrast settings preserved when switching between images
+   - Navigate images using the file list on the left
 
-3. **Class Management**:
-   - Enter class names in the text box and press Enter to add/remove classes.
-   - Classes are automatically saved to `class.txt` in the target directory.
+3. **Labeling Workflow**:
+   - Add classes: Type in text box and press Enter (or click `Add class`)
+   - Remove classes: Type existing class name and press Enter
+   - Assign labels: Select image → Click class name to label it
+   - Real-time auto-save to `labels.csv` and `class.txt`
 
-4. **Labeling Workflow**:
-   - Select an image from the file list to display it.
-   - Click on a class name to assign that label to the current image.
-   - Labels are automatically saved to `labels.csv` in real-time.
+4. **Resume Sessions**:
+   - Previous work automatically loaded when reopening directories
+   - Continue labeling from where you left off
 
-5. **Resume Capability**:
-   - Previous labels and classes are automatically loaded when reopening a directory.
-   - The workflow can be resumed from where you left off.
+## Performance Notes
+
+- **Video annotation**: Optimized with frame caching and parallel prefetching for smooth playback
+- **Large datasets**: Classification widget handles thousands of images efficiently  
+- **Memory management**: LRU cache prevents memory overflow during long annotation sessions
+
+## Output Formats
+
+| Widget | Annotation File | Class File | Format |
+|--------|----------------|------------|---------|
+| Bbox (Images) | `image.txt` | `class.yaml` | YOLO standard |
+| Bbox (Video) | `video.txt` | `class.yaml` | Extended YOLO with frame |
+| Classification | `labels.csv` | `class.txt` | CSV with image-label pairs |
 
 
 ## Contributing
