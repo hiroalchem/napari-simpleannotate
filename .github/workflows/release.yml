@@ -49,6 +49,10 @@ jobs:
         # Skip GUI tests that may cause segfaults in CI
         CI: true
     
+    - name: Install ruff
+      run: |
+        pip install ruff
+    
     - name: Run linting
       run: |
         ruff check src/
