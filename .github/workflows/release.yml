@@ -21,14 +21,33 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglib2.0-0 libgl1 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-xinerama0 xvfb
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e .[testing]
     
+    - name: Set up virtual display (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        export DISPLAY=:99.0
+        Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+        sleep 3
+    
     - name: Run tests
       run: |
         pytest -v --color=yes --cov=napari_simpleannotate --cov-report=xml
+      env:
+        # Set environment variables for headless testing
+        QT_QPA_PLATFORM: offscreen
+        DISPLAY: :99.0
+        # Skip GUI tests that may cause segfaults in CI
+        CI: true
     
     - name: Run linting
       run: |

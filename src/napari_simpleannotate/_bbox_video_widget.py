@@ -25,46 +25,42 @@ TODO for future zarr re-enablement:
 - Add better progress reporting and cancellation support
 """
 
-import os
-from typing import TYPE_CHECKING
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import multiprocessing as mp
-from functools import partial
-from collections import OrderedDict
+import os
 import threading
-import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 import numpy as np
-from skimage import io
+import yaml
+import zarr
+from napari.utils.notifications import show_warning
+from napari_video.napari_video import VideoReaderNP
 from qtpy.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFileDialog,
+    QLabel,
     QLineEdit,
     QListWidget,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QLabel,
-    QCheckBox,
-    QProgressBar,
 )
-from qtpy.QtCore import QTimer
-import yaml
-from napari_video.napari_video import VideoReaderNP
-from napari.utils.notifications import show_warning
-import zarr
-from numcodecs import Blosc
+from skimage import io
 
 from ._utils import find_missing_number, xywh2xyxy
 
 if TYPE_CHECKING:
-    import napari
+    pass
 
 
 class CachedVideoReader:
     """Video reader wrapper with LRU cache and parallel prefetching."""
-    
+
     def __init__(self, video_reader, max_cache_size=100, prefetch_size=10, video_path=None):
         self.video_reader = video_reader
         self.video_path = video_path  # Store path for creating new VideoReader instances
@@ -75,32 +71,32 @@ class CachedVideoReader:
         self.prefetch_executor = ThreadPoolExecutor(max_workers=2)
         self.prefetch_futures = {}
         self.total_frames = len(video_reader) if hasattr(video_reader, '__len__') else video_reader.shape[0]
-        
+
         # Delegate attributes to original video reader
         for attr in ['shape', 'dtype', 'ndim', 'size', 'nbytes']:
             if hasattr(video_reader, attr):
                 setattr(self, attr, getattr(video_reader, attr))
-        
+
         # Make the object hashable
         self._hash = id(self)
-        
+
         # Add array interface for better numpy/napari compatibility
         if hasattr(video_reader, '__array_interface__'):
             self.__array_interface__ = video_reader.__array_interface__
-    
+
     def __len__(self):
         return self.total_frames
-    
+
     def __array__(self):
         """Convert to numpy array when needed."""
         # Return all frames as numpy array
         frames = [self.get_frame(i) for i in range(len(self))]
         return np.stack(frames)
-    
+
     def __hash__(self):
         """Make the object hashable."""
         return self._hash
-    
+
     def __eq__(self, other):
         """Equality comparison."""
         # Handle comparison with unhashable types like slices
@@ -114,14 +110,14 @@ class CachedVideoReader:
         except TypeError:
             # If comparison fails (e.g., with unhashable types), return False
             return False
-    
+
     def __getitem__(self, index):
         """Get frame(s) with caching."""
         # Handle tuple of slices (from napari)
         if isinstance(index, tuple):
             # Extract frame index from first element
             frame_slice = index[0]
-            
+
             if isinstance(frame_slice, slice):
                 # Handle slice access for frames
                 indices = range(*frame_slice.indices(len(self)))
@@ -132,7 +128,7 @@ class CachedVideoReader:
                     if len(index) > 1:
                         frame = frame[index[1:]]
                     frames.append(frame)
-                    
+
                 # Return as numpy array
                 if frames:
                     return np.stack(frames)
@@ -157,7 +153,7 @@ class CachedVideoReader:
                 return frame
             else:
                 raise TypeError(f"Invalid index type: {type(frame_slice)}")
-                
+
         elif isinstance(index, slice):
             # Handle simple slice access
             indices = range(*index.indices(len(self)))
@@ -175,7 +171,7 @@ class CachedVideoReader:
             return self.get_frame(int(index))
         else:
             raise TypeError(f"Invalid index type: {type(index)}")
-        
+
     def get_frame(self, frame_idx):
         """Get frame with caching and prefetching."""
         with self.cache_lock:
@@ -184,55 +180,55 @@ class CachedVideoReader:
                 # Move to end (most recently used)
                 frame = self.cache.pop(frame_idx)
                 self.cache[frame_idx] = frame
-                
+
                 # Trigger prefetch for nearby frames
                 self._prefetch_nearby_frames(frame_idx)
-                
+
                 return frame
-        
+
         # Frame not in cache, load it
         frame = self._load_frame(frame_idx)
-        
+
         with self.cache_lock:
             # Add to cache
             self.cache[frame_idx] = frame
-            
+
             # Remove oldest frames if cache is full
             while len(self.cache) > self.max_cache_size:
                 self.cache.popitem(last=False)
-        
+
         # Trigger prefetch for nearby frames
         self._prefetch_nearby_frames(frame_idx)
-        
+
         return frame
-    
+
     def _load_frame(self, frame_idx):
         """Load a single frame from video reader."""
         try:
             return self.video_reader[frame_idx].copy()
-        except Exception as e:
+        except (IndexError, ValueError, OSError) as e:
             print(f"Error loading frame {frame_idx}: {e}")
             # Return black frame as fallback
             shape = getattr(self.video_reader, 'shape', (1, 480, 640, 3))
             return np.zeros(shape[1:], dtype='uint8')
-    
+
     def _prefetch_nearby_frames(self, center_frame):
         """Prefetch frames around the current frame."""
         # Calculate prefetch range
         start_frame = max(0, center_frame - self.prefetch_size // 2)
         end_frame = min(self.total_frames, center_frame + self.prefetch_size // 2 + 1)
-        
+
         for frame_idx in range(start_frame, end_frame):
             if frame_idx != center_frame and frame_idx not in self.cache:
                 # Cancel any existing prefetch for this frame
                 if frame_idx in self.prefetch_futures:
                     self.prefetch_futures[frame_idx].cancel()
-                
+
                 # Start new prefetch with separate VideoReader instance
                 if self.prefetch_executor:
                     future = self.prefetch_executor.submit(self._prefetch_frame_safe, frame_idx)
                     self.prefetch_futures[frame_idx] = future
-    
+
     def _prefetch_frame_safe(self, frame_idx):
         """Prefetch a frame using a separate VideoReader instance."""
         try:
@@ -243,54 +239,54 @@ class CachedVideoReader:
             else:
                 # Fallback to main reader (might cause threading issues)
                 frame = self._load_frame(frame_idx)
-            
+
             with self.cache_lock:
                 # Only add if not already in cache and cache isn't full
                 if frame_idx not in self.cache and len(self.cache) < self.max_cache_size:
                     self.cache[frame_idx] = frame
-                    
+
                     # Remove oldest frames if cache is full
                     while len(self.cache) > self.max_cache_size:
                         self.cache.popitem(last=False)
-            
+
             # Clean up future reference
             if frame_idx in self.prefetch_futures:
                 del self.prefetch_futures[frame_idx]
-                
+
         except Exception as e:
             print(f"Safe prefetch error for frame {frame_idx}: {e}")
-    
+
     def _prefetch_frame(self, frame_idx):
         """Prefetch a frame in background thread."""
         try:
             frame = self._load_frame(frame_idx)
-            
+
             with self.cache_lock:
                 # Only add if not already in cache and cache isn't full
                 if frame_idx not in self.cache and len(self.cache) < self.max_cache_size:
                     self.cache[frame_idx] = frame
-                    
+
                     # Remove oldest frames if cache is full
                     while len(self.cache) > self.max_cache_size:
                         self.cache.popitem(last=False)
-            
+
             # Clean up future reference
             if frame_idx in self.prefetch_futures:
                 del self.prefetch_futures[frame_idx]
-                
+
         except Exception as e:
             print(f"Prefetch error for frame {frame_idx}: {e}")
-    
+
     def clear_cache(self):
         """Clear all cached frames."""
         with self.cache_lock:
             self.cache.clear()
-        
+
         # Cancel all prefetch operations
         for future in self.prefetch_futures.values():
             future.cancel()
         self.prefetch_futures.clear()
-    
+
     def get_cache_info(self):
         """Get cache statistics."""
         with self.cache_lock:
@@ -330,7 +326,7 @@ class BboxVideoQWidget(QWidget):
 
         # Create label to show current frame info
         self.frame_info_label = QLabel("Frame: 0/0", self)
-        
+
         # Create label to show cache info
         self.cache_info_label = QLabel("Cache: disabled", self)
 
@@ -425,57 +421,58 @@ class BboxVideoQWidget(QWidget):
 
     def convert_video_to_zarr(self, video_path, zarr_path):
         """Fast video to zarr conversion with multiprocessing.
-        
+
         NOTE: This method is currently DISABLED - zarr functionality is commented out
         for future improvement. Issues to resolve before re-enabling:
         1. Slow conversion speed for large videos
         2. High memory usage during conversion
         3. Blosc compressor compatibility issues
         4. Better chunk size calculation algorithms
-        
+
         Currently using LRU cache with parallel prefetching instead.
         """
-        import cv2
-        from queue import Queue
         import threading
-        
+        from queue import Queue
+
+        import cv2
+
         try:
             # Show progress bar
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
-            
+
             # Open video to get properties
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 raise Exception(f"Could not open video file: {video_path}")
-            
+
             # Get video properties
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
-            
+
             print(f"Video info: {total_frames} frames, {width}x{height}, {fps} fps")
-            
+
             # Read first frame to determine channels
             ret, frame = cap.read()
             if not ret:
                 raise Exception("Could not read first frame")
             channels = frame.shape[2] if len(frame.shape) > 2 else 1
             cap.release()
-            
+
             # Calculate safe chunk size
             bytes_per_frame = height * width * channels
             max_bytes = 1024 * 1024 * 1024  # 1GB limit
             max_frames_per_chunk = max(1, max_bytes // bytes_per_frame)
             chunk_frames = min(10, max_frames_per_chunk, total_frames)
-            
+
             print(f"Using chunk size of {chunk_frames} frames, processing with {mp.cpu_count()} workers")
-            
+
             # Create zarr array
             from numcodecs import Blosc
             compressor = Blosc(cname='lz4', clevel=1, shuffle=Blosc.SHUFFLE)  # Faster compression
-            
+
             z = zarr.open_array(
                 zarr_path,
                 mode='w',
@@ -485,11 +482,11 @@ class BboxVideoQWidget(QWidget):
                 compressor=compressor,
                 zarr_format=2
             )
-            
+
             # Producer-consumer pattern with threading
             frame_queue = Queue(maxsize=100)  # Buffer for frames
             frames_processed = 0
-            
+
             def video_reader():
                 """Read frames in a separate thread."""
                 cap = cv2.VideoCapture(video_path)
@@ -502,26 +499,26 @@ class BboxVideoQWidget(QWidget):
                         frame_queue.put((i, None))
                 frame_queue.put(None)  # Signal end
                 cap.release()
-            
+
             # Start video reader thread
             reader_thread = threading.Thread(target=video_reader)
             reader_thread.start()
-            
+
             # Process frames with thread pool for parallel color conversion
             batch_frames = []
             batch_indices = []
-            
+
             with ThreadPoolExecutor(max_workers=4) as executor:
                 while True:
                     item = frame_queue.get()
                     if item is None:  # End signal
                         break
-                    
+
                     idx, frame = item
                     if frame is not None:
                         batch_frames.append(frame)
                         batch_indices.append(idx)
-                    
+
                     # Write batch when full or at end
                     if len(batch_frames) >= chunk_frames or idx == total_frames - 1:
                         if batch_frames:
@@ -529,60 +526,60 @@ class BboxVideoQWidget(QWidget):
                             batch_array = np.stack(batch_frames)
                             start_idx = batch_indices[0]
                             z[start_idx:start_idx + len(batch_frames)] = batch_array
-                            
+
                             frames_processed += len(batch_frames)
                             batch_frames = []
                             batch_indices = []
-                            
+
                             # Update progress
                             progress = int(frames_processed / total_frames * 100)
                             self.progress_bar.setValue(progress)
-                            
+
                             from qtpy.QtWidgets import QApplication
                             QApplication.processEvents()
-            
+
             reader_thread.join()
-            
+
             # Hide progress bar
             self.progress_bar.setVisible(False)
             self.progress_bar.setValue(0)
-            
+
             print(f"Successfully converted {frames_processed} frames to zarr: {zarr_path}")
             return True
-            
+
         except Exception as e:
             self.progress_bar.setVisible(False)
             print(f"Error in zarr conversion: {e}")
             import traceback
             traceback.print_exc()
-            
+
             # Fallback to simple method
             print("Trying fallback method...")
             return self.convert_video_to_zarr_simple(video_path, zarr_path)
-    
+
     def convert_video_to_zarr_simple(self, video_path, zarr_path):
         """Simple conversion without multiprocessing."""
         import cv2
         try:
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
-            
+
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
                 return False
-            
+
             # Get properties
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            
+
             ret, frame = cap.read()
             if not ret:
                 cap.release()
                 return False
             channels = frame.shape[2] if len(frame.shape) > 2 else 1
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            
+
             # Create zarr with minimal compression for speed
             z = zarr.open_array(
                 zarr_path,
@@ -593,47 +590,47 @@ class BboxVideoQWidget(QWidget):
                 compressor=None,  # No compression for maximum speed
                 zarr_format=2
             )
-            
+
             # Simple sequential processing
             for i in range(total_frames):
                 ret, frame = cap.read()
                 if ret:
                     z[i] = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                
+
                 if i % 50 == 0:
                     self.progress_bar.setValue(int((i + 1) / total_frames * 100))
                     from qtpy.QtWidgets import QApplication
                     QApplication.processEvents()
-            
+
             cap.release()
             self.progress_bar.setVisible(False)
-            
+
             print(f"Converted {total_frames} frames (uncompressed)")
             return True
-            
+
         except Exception as e:
             self.progress_bar.setVisible(False)
             print(f"Simple conversion failed: {e}")
             return self.convert_video_to_zarr_fallback(video_path, zarr_path)
-    
+
     def convert_video_to_zarr_fallback(self, video_path, zarr_path):
         """Fallback conversion method using VideoReaderNP."""
         try:
             # Show progress bar
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
-            
+
             # Read video with VideoReaderNP
             vr = VideoReaderNP(video_path)
             total_frames = vr.shape[0]
             height = vr.shape[1]
             width = vr.shape[2]
             channels = vr.shape[3] if len(vr.shape) > 3 else 3
-            
+
             # Create zarr array
             from numcodecs import Blosc
             compressor = Blosc(cname='lz4', clevel=5, shuffle=Blosc.SHUFFLE)
-            
+
             z = zarr.open_array(
                 zarr_path,
                 mode='w',
@@ -643,7 +640,7 @@ class BboxVideoQWidget(QWidget):
                 compressor=compressor,
                 zarr_format=2
             )
-            
+
             # Process frames
             for i in range(total_frames):
                 try:
@@ -651,18 +648,18 @@ class BboxVideoQWidget(QWidget):
                 except Exception as e:
                     print(f"Error reading frame {i}: {e}")
                     z[i] = np.zeros((height, width, channels), dtype='uint8')
-                
+
                 if i % 10 == 0 or i == total_frames - 1:
                     progress = int((i + 1) / total_frames * 100)
                     self.progress_bar.setValue(progress)
-                    
+
                     from qtpy.QtWidgets import QApplication
                     QApplication.processEvents()
-            
+
             self.progress_bar.setVisible(False)
             print(f"Successfully converted video to zarr format: {zarr_path}")
             return True
-            
+
         except Exception as e:
             self.progress_bar.setVisible(False)
             print(f"Error in fallback conversion: {e}")
@@ -675,24 +672,24 @@ class BboxVideoQWidget(QWidget):
             # Clear existing cache
             if self.frame_cache:
                 self.frame_cache.clear_cache()
-            
+
             # ZARR FUNCTIONALITY DISABLED FOR NOW - FUTURE IMPROVEMENT
             # TODO: Re-enable after resolving performance and compatibility issues
             # Issues to resolve:
             # 1. Slow conversion speed for large videos
-            # 2. Memory usage during conversion  
+            # 2. Memory usage during conversion
             # 3. Blosc compressor compatibility with zarr format versions
             # 4. Better chunk size calculation for different video resolutions
-            
+
             # Keep zarr_path definition for future use
             zarr_path = os.path.splitext(video_path)[0] + '.zarr'
-            
+
             # Force use of cached VideoReaderNP (zarr checkbox is disabled)
             print("Using cached VideoReaderNP with LRU cache and parallel prefetching")
             base_reader = VideoReaderNP(self.video_path)
             video_data = CachedVideoReader(base_reader, max_cache_size=50, prefetch_size=20, video_path=self.video_path)
             self.frame_cache = video_data
-            
+
             # COMMENTED OUT ZARR CODE - KEEP FOR FUTURE REFERENCE
             # if self.use_zarr_checkbox.isChecked():
             #     # Check if zarr file exists
@@ -733,7 +730,7 @@ class BboxVideoQWidget(QWidget):
             # Debug info
             print(f"Video data type: {type(video_data)}")
             print(f"Video data shape: {getattr(video_data, 'shape', 'No shape attr')}")
-            
+
             try:
                 self.video_layer = self.viewer.add_image(video_data, name="video_layer", rgb=True)
                 print(f"Video loaded: {self.video_path}")
@@ -792,7 +789,7 @@ class BboxVideoQWidget(QWidget):
     def update_frame_info(self):
         """Update frame information display."""
         self.frame_info_label.setText(f"Frame: {self.current_frame}/{self.total_frames}")
-        
+
         # Update cache info if cache is active
         if self.frame_cache:
             cache_info = self.frame_cache.get_cache_info()
@@ -996,7 +993,7 @@ class BboxVideoQWidget(QWidget):
 
         class_file_path = os.path.join(self.annotation_dir, "class.yaml")
         try:
-            with open(class_file_path, "r") as f:
+            with open(class_file_path) as f:
                 class_data = yaml.safe_load(f)
 
             self.classlistWidget.clear()
@@ -1067,7 +1064,7 @@ class BboxVideoQWidget(QWidget):
                 except:
                     continue
 
-                with open(annotation_file, "r") as f:
+                with open(annotation_file) as f:
                     for line in f:
                         line = line.strip()
                         if not line:

@@ -1,12 +1,14 @@
-from functools import partial
 import os
+from functools import partial
 from typing import TYPE_CHECKING
 
 import numpy as np
 import skimage.io
+import yaml
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
@@ -15,14 +17,12 @@ from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QCheckBox,
 )
-import yaml
 
-from ._utils import find_missing_number, xywh2xyxy, save_text
+from ._utils import find_missing_number, save_text, xywh2xyxy
 
 if TYPE_CHECKING:
-    import napari
+    pass
 
 
 class BboxQWidget(QWidget):
@@ -151,7 +151,7 @@ class BboxQWidget(QWidget):
     def popup(self, message_type=None):
         if message_type == "None":
             return
-        
+
         # Skip popup during testing
         import sys
         if 'pytest' in sys.modules:
@@ -159,7 +159,7 @@ class BboxQWidget(QWidget):
             if message_type == "numbering":
                 self.current_class_number = max(self.numbers) + 1 if self.numbers else 0
             return
-            
+
         popup = QMessageBox(self)
         if message_type == "numbering":
             popup.setWindowTitle("Numbering")
@@ -284,7 +284,7 @@ class BboxQWidget(QWidget):
 
         class_file = os.path.dirname(image_file) + "/class.yaml"
         if os.path.isfile(class_file):
-            with open(class_file, "r") as file:
+            with open(class_file) as file:
                 class_data_from_yaml = yaml.safe_load(file)
             print(class_data_from_yaml)
             if self.classlistWidget.count() != 0:
@@ -310,7 +310,7 @@ class BboxQWidget(QWidget):
 
         txt_file = os.path.splitext(image_file)[0] + ".txt"
         if os.path.exists(txt_file):
-            with open(txt_file, "r") as f:
+            with open(txt_file) as f:
                 lines = f.readlines()
                 shapes_data = []
                 for line in lines:
@@ -322,7 +322,7 @@ class BboxQWidget(QWidget):
                     )
                     shapes_data.append([[y_min, x_min], [y_min, x_max], [y_max, x_max], [y_max, x_min]])
                     # TODO: Add function to convert class_id to class name
-                    if str(int(class_id)) in items_dict_with_no.keys():
+                    if str(int(class_id)) in items_dict_with_no:
                         classes.append(str(int(class_id)) + ": " + items_dict_with_no[str(int(class_id))])
                     else:
                         self.classlistWidget.addItem(str(int(class_id)) + ": ")
@@ -394,7 +394,7 @@ class BboxQWidget(QWidget):
 
         if not os.path.isfile(class_file):
             self.check_file(class_file, class_data, file_type="classlist")
-        with open(class_file, "r") as file:
+        with open(class_file) as file:
             prev_items_dict = yaml.safe_load(file)
         if prev_items_dict != class_data:
             self.check_file(class_file, class_data, file_type="classlist")
@@ -409,7 +409,7 @@ class BboxQWidget(QWidget):
             popup.setWindowTitle("Save File")
 
         if os.path.isfile(filepath):
-            with open(filepath, "r") as f:
+            with open(filepath) as f:
                 if f.read() == file_str:
                     self.show_saved_popup(popup, filepath, file_str, file_type)
                 else:
