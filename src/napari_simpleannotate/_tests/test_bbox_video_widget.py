@@ -11,7 +11,7 @@ from napari_simpleannotate import BboxVideoQWidget
 # Skip GUI-intensive tests in CI environments to avoid segfaults
 pytestmark = pytest.mark.skipif(
     os.environ.get("CI") == "true" and os.environ.get("QT_QPA_PLATFORM") == "offscreen",
-    reason="GUI tests may cause segfaults in CI environment"
+    reason="GUI tests may cause segfaults in CI environment",
 )
 
 
@@ -22,11 +22,11 @@ def test_bbox_video_widget_init(make_napari_viewer):
 
     # Check that widget is properly initialized
     assert widget.viewer == viewer
-    assert hasattr(widget, 'classlistWidget')
-    assert hasattr(widget, 'class_textbox')
-    assert hasattr(widget, 'video_info_label')
-    assert hasattr(widget, 'frame_info_label')
-    assert hasattr(widget, 'features')
+    assert hasattr(widget, "classlistWidget")
+    assert hasattr(widget, "class_textbox")
+    assert hasattr(widget, "video_info_label")
+    assert hasattr(widget, "frame_info_label")
+    assert hasattr(widget, "features")
     assert widget.video_path == ""
     assert widget.video_dir == ""
     assert widget.total_frames == 0
@@ -44,7 +44,7 @@ def test_add_class(make_napari_viewer):
         # Add a class
         widget.class_textbox.setText("person")
 
-        with patch.object(widget, 'save_classes') as mock_save:
+        with patch.object(widget, "save_classes") as mock_save:
             widget.add_class()
 
         # Check that class was added
@@ -66,7 +66,7 @@ def test_add_duplicate_class(make_napari_viewer):
     # Try to add the same class again
     widget.class_textbox.setText("person")
 
-    with patch('qtpy.QtWidgets.QMessageBox.information') as mock_info:
+    with patch("qtpy.QtWidgets.QMessageBox.information") as mock_info:
         widget.add_class()
         mock_info.assert_called_once()
 
@@ -86,8 +86,8 @@ def test_del_class(make_napari_viewer):
         widget.classlistWidget.addItem("0: person")
         widget.classlistWidget.setCurrentRow(0)
 
-        with patch('qtpy.QtWidgets.QMessageBox.question', return_value=16384):  # QMessageBox.Yes
-            with patch.object(widget, 'save_classes') as mock_save:
+        with patch("qtpy.QtWidgets.QMessageBox.question", return_value=16384):  # QMessageBox.Yes
+            with patch.object(widget, "save_classes") as mock_save:
                 widget.del_class()
                 mock_save.assert_called_once()
 
@@ -124,7 +124,7 @@ def test_load_classes(make_napari_viewer):
         # Create class.yaml file
         class_data = {0: "person", 1: "car", 2: "bike"}
         class_file = os.path.join(temp_dir, "class.yaml")
-        with open(class_file, 'w') as f:
+        with open(class_file, "w") as f:
             yaml.dump(class_data, f)
 
         widget.load_classes()
@@ -162,8 +162,8 @@ def test_save_classes(make_napari_viewer):
         assert loaded_data[1] == "car"
 
 
-@patch('qtpy.QtWidgets.QFileDialog.getOpenFileName')
-@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', True)
+@patch("qtpy.QtWidgets.QFileDialog.getOpenFileName")
+@patch("napari_simpleannotate._bbox_video_widget.HAS_PYAV", True)
 def test_open_video_no_file_selected(mock_dialog, make_napari_viewer):
     """Test opening video when no file is selected."""
     viewer = make_napari_viewer()
@@ -178,13 +178,13 @@ def test_open_video_no_file_selected(mock_dialog, make_napari_viewer):
     assert widget.video_path == ""
 
 
-@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', False)
+@patch("napari_simpleannotate._bbox_video_widget.HAS_PYAV", False)
 def test_open_video_no_pyav(make_napari_viewer):
     """Test opening video when PyAV is not available."""
     viewer = make_napari_viewer()
     widget = BboxVideoQWidget(viewer)
 
-    with patch('qtpy.QtWidgets.QMessageBox.warning') as mock_warning:
+    with patch("qtpy.QtWidgets.QMessageBox.warning") as mock_warning:
         widget.openVideo()
         mock_warning.assert_called_once()
 
@@ -198,7 +198,7 @@ def test_on_frame_changed(make_napari_viewer):
     mock_event = MagicMock()
     mock_event.value = [5, 0, 0]  # frame 5
 
-    with patch.object(widget, 'update_frame_info') as mock_update:
+    with patch.object(widget, "update_frame_info") as mock_update:
         widget.on_frame_changed(mock_event)
 
         assert widget.current_frame == 5
@@ -254,8 +254,8 @@ def test_layers_initialization(make_napari_viewer):
     assert bbox_layer.text == widget.text
 
 
-@patch('qtpy.QtWidgets.QFileDialog.getOpenFileName')
-@patch('napari_simpleannotate._bbox_video_widget.HAS_PYAV', True)
+@patch("qtpy.QtWidgets.QFileDialog.getOpenFileName")
+@patch("napari_simpleannotate._bbox_video_widget.HAS_PYAV", True)
 def test_load_video_success(mock_dialog, make_napari_viewer):
     """Test successful video loading."""
     viewer = make_napari_viewer()
@@ -268,9 +268,9 @@ def test_load_video_success(mock_dialog, make_napari_viewer):
     # Mock the PyAV loading
     mock_frames = np.random.randint(0, 255, (100, 480, 640, 3), dtype=np.uint8)
 
-    with patch.object(widget, 'load_video_with_pyav', return_value=mock_frames) as mock_load_pyav:
-        with patch.object(widget, 'load_classes') as mock_load_classes:
-            with patch.object(widget, 'load_annotations') as mock_load_annotations:
+    with patch.object(widget, "load_video_with_pyav", return_value=mock_frames) as mock_load_pyav:
+        with patch.object(widget, "load_classes") as mock_load_classes:
+            with patch.object(widget, "load_annotations") as mock_load_annotations:
                 widget.openVideo()
 
     # Check that video was loaded

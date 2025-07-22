@@ -62,6 +62,7 @@ def test_xywh2xyxy_basic():
     expected = [40.0, 35.0, 60.0, 65.0]
     # Use pytest.approx for floating point comparison
     import pytest
+
     assert result == pytest.approx(expected)
 
 
@@ -75,6 +76,7 @@ def test_xywh2xyxy_different_scales():
     # Expected: x1=60, y1=40, x2=140, y2=60
     expected = [60.0, 40.0, 140.0, 60.0]
     import pytest
+
     assert result == pytest.approx(expected)
 
 
@@ -134,12 +136,7 @@ def test_save_text_classlist_complex():
     """Test saving complex classlist data."""
     with tempfile.TemporaryDirectory() as temp_dir:
         filepath = os.path.join(temp_dir, "complex_class.yaml")
-        complex_data = {
-            0: "person",
-            1: "vehicle",
-            5: "animal",  # Non-sequential
-            10: "object"
-        }
+        complex_data = {0: "person", 1: "vehicle", 5: "animal", 10: "object"}  # Non-sequential
 
         save_text(filepath, complex_data, "classlist")
 
@@ -153,11 +150,7 @@ def test_save_text_annotations_multiline():
     """Test saving multi-line annotation text."""
     with tempfile.TemporaryDirectory() as temp_dir:
         filepath = os.path.join(temp_dir, "annotations.txt")
-        annotations = [
-            "0 0.5 0.5 0.2 0.3",
-            "1 0.3 0.7 0.1 0.2",
-            "0 0.8 0.2 0.15 0.25"
-        ]
+        annotations = ["0 0.5 0.5 0.2 0.3", "1 0.3 0.7 0.1 0.2", "0 0.8 0.2 0.15 0.25"]
         text_content = "\n".join(annotations)
 
         save_text(filepath, text_content, "annotations")

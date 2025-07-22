@@ -154,7 +154,8 @@ class BboxQWidget(QWidget):
 
         # Skip popup during testing
         import sys
-        if 'pytest' in sys.modules:
+
+        if "pytest" in sys.modules:
             # Default behavior for testing: always append for numbering
             if message_type == "numbering":
                 self.current_class_number = max(self.numbers) + 1 if self.numbers else 0

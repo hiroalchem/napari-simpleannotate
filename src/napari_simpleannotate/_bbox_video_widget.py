@@ -70,10 +70,10 @@ class CachedVideoReader:
         self.cache_lock = threading.RLock()
         self.prefetch_executor = ThreadPoolExecutor(max_workers=2)
         self.prefetch_futures = {}
-        self.total_frames = len(video_reader) if hasattr(video_reader, '__len__') else video_reader.shape[0]
+        self.total_frames = len(video_reader) if hasattr(video_reader, "__len__") else video_reader.shape[0]
 
         # Delegate attributes to original video reader
-        for attr in ['shape', 'dtype', 'ndim', 'size', 'nbytes']:
+        for attr in ["shape", "dtype", "ndim", "size", "nbytes"]:
             if hasattr(video_reader, attr):
                 setattr(self, attr, getattr(video_reader, attr))
 
@@ -81,7 +81,7 @@ class CachedVideoReader:
         self._hash = id(self)
 
         # Add array interface for better numpy/napari compatibility
-        if hasattr(video_reader, '__array_interface__'):
+        if hasattr(video_reader, "__array_interface__"):
             self.__array_interface__ = video_reader.__array_interface__
 
     def __len__(self):
@@ -209,8 +209,8 @@ class CachedVideoReader:
         except (IndexError, ValueError, OSError) as e:
             print(f"Error loading frame {frame_idx}: {e}")
             # Return black frame as fallback
-            shape = getattr(self.video_reader, 'shape', (1, 480, 640, 3))
-            return np.zeros(shape[1:], dtype='uint8')
+            shape = getattr(self.video_reader, "shape", (1, 480, 640, 3))
+            return np.zeros(shape[1:], dtype="uint8")
 
     def _prefetch_nearby_frames(self, center_frame):
         """Prefetch frames around the current frame."""
@@ -291,9 +291,9 @@ class CachedVideoReader:
         """Get cache statistics."""
         with self.cache_lock:
             return {
-                'cache_size': len(self.cache),
-                'max_cache_size': self.max_cache_size,
-                'active_prefetches': len(self.prefetch_futures)
+                "cache_size": len(self.cache),
+                "max_cache_size": self.max_cache_size,
+                "active_prefetches": len(self.prefetch_futures),
             }
 
 
@@ -315,7 +315,9 @@ class BboxVideoQWidget(QWidget):
         self.use_zarr_checkbox = QCheckBox("Use Zarr for faster loading (Experimental - Disabled)", self)
         self.use_zarr_checkbox.setChecked(False)  # Always disabled for now
         self.use_zarr_checkbox.setEnabled(False)  # Disable the checkbox
-        self.use_zarr_checkbox.setToolTip("Convert video to Zarr format for memory-efficient fast loading\n(Currently disabled - using frame cache instead)")
+        self.use_zarr_checkbox.setToolTip(
+            "Convert video to Zarr format for memory-efficient fast loading\n(Currently disabled - using frame cache instead)"
+        )
 
         # Create progress bar for zarr conversion (hidden when zarr is disabled)
         self.progress_bar = QProgressBar(self)
@@ -471,16 +473,17 @@ class BboxVideoQWidget(QWidget):
 
             # Create zarr array
             from numcodecs import Blosc
-            compressor = Blosc(cname='lz4', clevel=1, shuffle=Blosc.SHUFFLE)  # Faster compression
+
+            compressor = Blosc(cname="lz4", clevel=1, shuffle=Blosc.SHUFFLE)  # Faster compression
 
             z = zarr.open_array(
                 zarr_path,
-                mode='w',
+                mode="w",
                 shape=(total_frames, height, width, channels),
                 chunks=(chunk_frames, height, width, channels),
-                dtype='uint8',
+                dtype="uint8",
                 compressor=compressor,
-                zarr_format=2
+                zarr_format=2,
             )
 
             # Producer-consumer pattern with threading
@@ -525,7 +528,7 @@ class BboxVideoQWidget(QWidget):
                             # Write to zarr
                             batch_array = np.stack(batch_frames)
                             start_idx = batch_indices[0]
-                            z[start_idx:start_idx + len(batch_frames)] = batch_array
+                            z[start_idx : start_idx + len(batch_frames)] = batch_array
 
                             frames_processed += len(batch_frames)
                             batch_frames = []
@@ -536,6 +539,7 @@ class BboxVideoQWidget(QWidget):
                             self.progress_bar.setValue(progress)
 
                             from qtpy.QtWidgets import QApplication
+
                             QApplication.processEvents()
 
             reader_thread.join()
@@ -551,6 +555,7 @@ class BboxVideoQWidget(QWidget):
             self.progress_bar.setVisible(False)
             print(f"Error in zarr conversion: {e}")
             import traceback
+
             traceback.print_exc()
 
             # Fallback to simple method
@@ -560,6 +565,7 @@ class BboxVideoQWidget(QWidget):
     def convert_video_to_zarr_simple(self, video_path, zarr_path):
         """Simple conversion without multiprocessing."""
         import cv2
+
         try:
             self.progress_bar.setVisible(True)
             self.progress_bar.setValue(0)
@@ -583,12 +589,12 @@ class BboxVideoQWidget(QWidget):
             # Create zarr with minimal compression for speed
             z = zarr.open_array(
                 zarr_path,
-                mode='w',
+                mode="w",
                 shape=(total_frames, height, width, channels),
                 chunks=(1, height, width, channels),
-                dtype='uint8',
+                dtype="uint8",
                 compressor=None,  # No compression for maximum speed
-                zarr_format=2
+                zarr_format=2,
             )
 
             # Simple sequential processing
@@ -600,6 +606,7 @@ class BboxVideoQWidget(QWidget):
                 if i % 50 == 0:
                     self.progress_bar.setValue(int((i + 1) / total_frames * 100))
                     from qtpy.QtWidgets import QApplication
+
                     QApplication.processEvents()
 
             cap.release()
@@ -629,16 +636,17 @@ class BboxVideoQWidget(QWidget):
 
             # Create zarr array
             from numcodecs import Blosc
-            compressor = Blosc(cname='lz4', clevel=5, shuffle=Blosc.SHUFFLE)
+
+            compressor = Blosc(cname="lz4", clevel=5, shuffle=Blosc.SHUFFLE)
 
             z = zarr.open_array(
                 zarr_path,
-                mode='w',
+                mode="w",
                 shape=(total_frames, height, width, channels),
                 chunks=(1, height, width, channels),
-                dtype='uint8',
+                dtype="uint8",
                 compressor=compressor,
-                zarr_format=2
+                zarr_format=2,
             )
 
             # Process frames
@@ -647,13 +655,14 @@ class BboxVideoQWidget(QWidget):
                     z[i] = vr[i]
                 except Exception as e:
                     print(f"Error reading frame {i}: {e}")
-                    z[i] = np.zeros((height, width, channels), dtype='uint8')
+                    z[i] = np.zeros((height, width, channels), dtype="uint8")
 
                 if i % 10 == 0 or i == total_frames - 1:
                     progress = int((i + 1) / total_frames * 100)
                     self.progress_bar.setValue(progress)
 
                     from qtpy.QtWidgets import QApplication
+
                     QApplication.processEvents()
 
             self.progress_bar.setVisible(False)
@@ -682,7 +691,7 @@ class BboxVideoQWidget(QWidget):
             # 4. Better chunk size calculation for different video resolutions
 
             # Keep zarr_path definition for future use
-            zarr_path = os.path.splitext(video_path)[0] + '.zarr'
+            zarr_path = os.path.splitext(video_path)[0] + ".zarr"
 
             # Force use of cached VideoReaderNP (zarr checkbox is disabled)
             print("Using cached VideoReaderNP with LRU cache and parallel prefetching")
@@ -736,6 +745,7 @@ class BboxVideoQWidget(QWidget):
                 print(f"Video loaded: {self.video_path}")
             except Exception as e:
                 import traceback
+
                 print(f"Error adding image layer: {e}")
                 print("Full traceback:")
                 traceback.print_exc()

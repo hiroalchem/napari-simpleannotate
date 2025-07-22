@@ -16,10 +16,10 @@ def test_labelimg_widget_init(make_napari_viewer):
 
     # Check that widget is properly initialized
     assert widget.viewer == viewer
-    assert hasattr(widget, 'classlistWidget')
-    assert hasattr(widget, 'class_textbox')
-    assert hasattr(widget, 'listWidget')
-    assert hasattr(widget, 'split_channels_checkbox')
+    assert hasattr(widget, "classlistWidget")
+    assert hasattr(widget, "class_textbox")
+    assert hasattr(widget, "listWidget")
+    assert hasattr(widget, "split_channels_checkbox")
     assert isinstance(widget.df, pd.DataFrame)
     assert widget.target_dir == ""
 
@@ -64,7 +64,7 @@ def test_remove_existing_class(make_napari_viewer):
         assert "dog" in widget.classlist
 
 
-@patch('qtpy.QtWidgets.QFileDialog.getExistingDirectory')
+@patch("qtpy.QtWidgets.QFileDialog.getExistingDirectory")
 def test_open_directory(mock_dialog, make_napari_viewer):
     """Test opening a directory with images."""
     viewer = make_napari_viewer()
@@ -97,9 +97,7 @@ def test_load_directory_with_existing_csv(make_napari_viewer):
             Path(temp_dir, filename).touch()
 
         # Create existing labels.csv
-        existing_df = pd.DataFrame({
-            "label": ["cat", "dog"]
-        }, index=["image1.png", "image2.jpg"])
+        existing_df = pd.DataFrame({"label": ["cat", "dog"]}, index=["image1.png", "image2.jpg"])
         existing_df.to_csv(os.path.join(temp_dir, "labels.csv"))
 
         widget.target_dir = temp_dir
@@ -154,7 +152,7 @@ def test_clear_list(make_napari_viewer):
     assert widget.target_dir == ""
 
 
-@patch('skimage.io.imread')
+@patch("skimage.io.imread")
 def test_load_image(mock_imread, make_napari_viewer):
     """Test loading and displaying an image."""
     viewer = make_napari_viewer()
@@ -197,7 +195,7 @@ def test_class_selected(make_napari_viewer):
         mock_item = MagicMock()
         mock_item.text.return_value = "cat"
 
-        with patch.object(widget, 'save_labels_to_csv') as mock_save:
+        with patch.object(widget, "save_labels_to_csv") as mock_save:
             widget.class_selected(mock_item, None)
 
         # Check that label was saved
@@ -213,9 +211,7 @@ def test_save_labels_to_csv(make_napari_viewer):
     with tempfile.TemporaryDirectory() as temp_dir:
         # Set up widget state
         widget.target_dir = temp_dir
-        widget.df = pd.DataFrame({
-            "label": ["cat", "dog"]
-        }, index=["image1.png", "image2.jpg"])
+        widget.df = pd.DataFrame({"label": ["cat", "dog"]}, index=["image1.png", "image2.jpg"])
 
         # Save labels
         widget.save_labels_to_csv()

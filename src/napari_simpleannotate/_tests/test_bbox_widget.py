@@ -8,7 +8,7 @@ from napari_simpleannotate import BboxQWidget
 # Skip GUI-intensive tests in CI environments to avoid segfaults
 pytestmark = pytest.mark.skipif(
     os.environ.get("CI") == "true" and os.environ.get("QT_QPA_PLATFORM") == "offscreen",
-    reason="GUI tests may cause segfaults in CI environment"
+    reason="GUI tests may cause segfaults in CI environment",
 )
 
 
@@ -19,11 +19,11 @@ def test_bbox_widget_init(make_napari_viewer):
 
     # Check that widget is properly initialized
     assert widget.viewer == viewer
-    assert hasattr(widget, 'classlistWidget')
-    assert hasattr(widget, 'class_textbox')
-    assert hasattr(widget, 'listWidget')
-    assert hasattr(widget, 'features')
-    assert hasattr(widget, 'text')
+    assert hasattr(widget, "classlistWidget")
+    assert hasattr(widget, "class_textbox")
+    assert hasattr(widget, "listWidget")
+    assert hasattr(widget, "features")
+    assert hasattr(widget, "text")
 
 
 def test_add_class(make_napari_viewer):
@@ -89,14 +89,14 @@ def test_del_class(make_napari_viewer):
     # Select and delete it
     widget.classlistWidget.setCurrentRow(0)
 
-    with patch('qtpy.QtWidgets.QMessageBox.question', return_value=16384):  # QMessageBox.Yes
+    with patch("qtpy.QtWidgets.QMessageBox.question", return_value=16384):  # QMessageBox.Yes
         widget.del_class()
 
     # Check that class was deleted
     assert widget.classlistWidget.count() == 0
 
 
-@patch('qtpy.QtWidgets.QFileDialog.getOpenFileName')
+@patch("qtpy.QtWidgets.QFileDialog.getOpenFileName")
 def test_open_file(mock_dialog, make_napari_viewer):
     """Test opening a single file."""
     viewer = make_napari_viewer()
@@ -107,7 +107,7 @@ def test_open_file(mock_dialog, make_napari_viewer):
     mock_dialog.return_value = (test_file, "")
 
     # Mock the open_image method completely to avoid file I/O
-    with patch.object(widget, 'open_image') as mock_open_image:
+    with patch.object(widget, "open_image") as mock_open_image:
         widget.openFile()
 
     # Check that file was added to list
@@ -117,8 +117,8 @@ def test_open_file(mock_dialog, make_napari_viewer):
     assert mock_open_image.call_count == 1
 
 
-@patch('qtpy.QtWidgets.QFileDialog.getExistingDirectory')
-@patch('os.listdir')
+@patch("qtpy.QtWidgets.QFileDialog.getExistingDirectory")
+@patch("os.listdir")
 def test_open_directory(mock_listdir, mock_dialog, make_napari_viewer):
     """Test opening a directory with images."""
     viewer = make_napari_viewer()
@@ -137,7 +137,7 @@ def test_open_directory(mock_listdir, mock_dialog, make_napari_viewer):
     expected_files = [
         os.path.join(test_dir, "image1.jpg"),
         os.path.join(test_dir, "image2.png"),
-        os.path.join(test_dir, "image3.tiff")
+        os.path.join(test_dir, "image3.tiff"),
     ]
     assert sorted(items) == sorted(expected_files)
 

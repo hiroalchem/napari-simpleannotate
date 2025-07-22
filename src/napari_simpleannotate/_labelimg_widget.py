@@ -29,7 +29,6 @@ class LabelImgQWidget(QWidget):
         self.initVariables()
         self.initLayers()
 
-
     def initUI(self):
         # Create button for opening a directory
         self.open_dir_button = QPushButton("Open Directory", self)
@@ -261,7 +260,7 @@ class LabelImgQWidget(QWidget):
                 name=f"l4c_images_ch{c}",
                 blending="additive",
                 colormap=color,
-                contrast_limits=contrast_limits
+                contrast_limits=contrast_limits,
             )
 
             # Apply stored contrast limits if available
