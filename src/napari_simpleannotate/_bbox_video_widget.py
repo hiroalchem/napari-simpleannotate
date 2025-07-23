@@ -336,7 +336,7 @@ class BboxVideoQWidget(QWidget):
         self.jump_prev_button = QPushButton("← Previous Annotation (Q)", self)
         self.jump_prev_button.clicked.connect(self.jump_to_previous_annotation)
         self.jump_prev_button.setEnabled(False)
-        
+
         self.jump_next_button = QPushButton("Next Annotation (W) →", self)
         self.jump_next_button.clicked.connect(self.jump_to_next_annotation)
         self.jump_next_button.setEnabled(False)
@@ -422,10 +422,10 @@ class BboxVideoQWidget(QWidget):
 
         # Connect to shape data change events
         shapes_layer.events.data.connect(self.on_shape_added)
-        
+
         # Bind keyboard shortcuts for navigation
-        self.viewer.bind_key('q', self.jump_to_previous_annotation)
-        self.viewer.bind_key('w', self.jump_to_next_annotation)
+        self.viewer.bind_key("q", self.jump_to_previous_annotation)
+        self.viewer.bind_key("w", self.jump_to_next_annotation)
 
     def openVideo(self):
         """Open video file using file dialog."""
@@ -798,7 +798,7 @@ class BboxVideoQWidget(QWidget):
 
             # 最初のフレームに移動
             self.viewer.dims.current_step = (0,) + self.viewer.dims.current_step[1:]
-            
+
             # Enable navigation buttons
             self.jump_prev_button.setEnabled(True)
             self.jump_next_button.setEnabled(True)
@@ -1286,24 +1286,24 @@ class BboxVideoQWidget(QWidget):
         """Jump to the nearest annotation before the current frame."""
         if not self.video_layer:
             return
-        
+
         shapes_layer = self.viewer.layers["bbox_layer"]
         if len(shapes_layer.data) == 0:
             return
-        
+
         # Get current frame
         current_frame = self.current_frame
-        
+
         # Get all annotated frames
         annotated_frames = set()
         for shape in shapes_layer.data:
             if len(shape) == 4:  # Rectangle shape
                 frame = int(shape[0][0])
                 annotated_frames.add(frame)
-        
+
         # Find previous annotated frames
         previous_frames = [f for f in annotated_frames if f < current_frame]
-        
+
         if previous_frames:
             # Jump to the nearest previous frame
             target_frame = max(previous_frames)
@@ -1311,29 +1311,29 @@ class BboxVideoQWidget(QWidget):
             print(f"Jumped to previous annotation at frame {target_frame}")
         else:
             print("No previous annotations found")
-    
+
     def jump_to_next_annotation(self, viewer=None):
         """Jump to the nearest annotation after the current frame."""
         if not self.video_layer:
             return
-        
+
         shapes_layer = self.viewer.layers["bbox_layer"]
         if len(shapes_layer.data) == 0:
             return
-        
+
         # Get current frame
         current_frame = self.current_frame
-        
+
         # Get all annotated frames
         annotated_frames = set()
         for shape in shapes_layer.data:
             if len(shape) == 4:  # Rectangle shape
                 frame = int(shape[0][0])
                 annotated_frames.add(frame)
-        
+
         # Find next annotated frames
         next_frames = [f for f in annotated_frames if f > current_frame]
-        
+
         if next_frames:
             # Jump to the nearest next frame
             target_frame = min(next_frames)
