@@ -89,6 +89,8 @@ After installing napari-simpleannotate, launch napari and navigate to `Plugins >
 2. **Navigation**:
    - Use napari's time slider to navigate frames
    - Frame counter shows current position: "Frame: X/Y"
+   - **Keyboard shortcuts**: Q (previous annotation), W (next annotation)
+   - Click navigation buttons to jump to nearest annotations
    - Video performance optimized with LRU cache and parallel prefetching
 
 3. **Frame-Aware Annotation**:
