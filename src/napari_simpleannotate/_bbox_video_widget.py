@@ -1482,10 +1482,20 @@ class BboxVideoQWidget(QWidget):
         # Initialize trackers
         for bbox_info in bboxes_to_track:
             try:
-                # Create tracker using CSRT (more accurate than KCF)
-                tracker = cv2.TrackerCSRT_create()
                 bbox = bbox_info["bbox"]
                 print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
+                
+                # Create TrackerVit with model
+                params = cv2.TrackerVit_Params()
+                # Get model path relative to this file
+                import pathlib
+                model_path = pathlib.Path(__file__).parent.parent.parent / "model" / "vit" / "object_tracking_vittrack_2023sep.onnx"
+                if not model_path.exists():
+                    print(f"Warning: Model file not found at {model_path}")
+                    # Try absolute path as fallback
+                    model_path = pathlib.Path("/Users/hiroki/vscode/napari-simpleannotate/model/vit/object_tracking_vittrack_2023sep.onnx")
+                params.net = str(model_path)
+                tracker = cv2.TrackerVit_create(params)
 
                 # Initialize tracker with current frame and bbox
                 success = tracker.init(frame_data, tuple(bbox))
@@ -1495,9 +1505,9 @@ class BboxVideoQWidget(QWidget):
                         "class": bbox_info["class"],
                         "last_bbox": bbox,
                     }
-                    print(f"Initialized tracker for bbox {bbox_info['index']} with class {bbox_info['class']}")
+                    print(f"Initialized TrackerVit for bbox {bbox_info['index']} with class {bbox_info['class']}")
                 else:
-                    print(f"Failed to initialize tracker for bbox {bbox_info['index']}")
+                    print(f"Failed to initialize TrackerVit for bbox {bbox_info['index']}")
             except Exception as e:
                 print(f"Failed to initialize tracker: {e}")
                 import traceback
