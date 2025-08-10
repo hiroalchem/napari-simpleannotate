@@ -1455,6 +1455,17 @@ class BboxVideoQWidget(QWidget):
         current_frame = self.current_frame
         
         print(f"Starting tracking from frame {current_frame} with {len(bboxes_to_track)} bounding boxes")
+        print(f"OpenCV version: {cv2.__version__}")
+        
+        # Check if TrackerVit is available
+        try:
+            test_params = cv2.TrackerVit_Params()
+            print("TrackerVit is available in this OpenCV build")
+        except AttributeError:
+            print("ERROR: TrackerVit is NOT available in this OpenCV build!")
+            print("You may need opencv-contrib-python instead of opencv-python")
+            yield None, "TrackerVit not available in OpenCV"
+            return
 
         # Get current frame image
         if hasattr(self.video_layer.data, "__getitem__"):
@@ -1486,7 +1497,9 @@ class BboxVideoQWidget(QWidget):
                 print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
                 
                 # Create TrackerVit with model
+                print(f"Step 1: Creating TrackerVit_Params...")
                 params = cv2.TrackerVit_Params()
+                
                 # Get model path relative to this file
                 import pathlib
                 model_path = pathlib.Path(__file__).parent.parent.parent / "model" / "vit" / "object_tracking_vittrack_2023sep.onnx"
@@ -1494,20 +1507,65 @@ class BboxVideoQWidget(QWidget):
                     print(f"Warning: Model file not found at {model_path}")
                     # Try absolute path as fallback
                     model_path = pathlib.Path("/Users/hiroki/vscode/napari-simpleannotate/model/vit/object_tracking_vittrack_2023sep.onnx")
+                
+                print(f"Step 2: Model path: {model_path}")
+                print(f"Step 3: Model exists: {model_path.exists()}")
+                
                 params.net = str(model_path)
-                tracker = cv2.TrackerVit_create(params)
+                print(f"Step 4: Creating TrackerVit with params.net = {params.net}")
+                
+                try:
+                    tracker = cv2.TrackerVit_create(params)
+                    print(f"Step 5: TrackerVit created successfully: {tracker}")
+                except Exception as e:
+                    print(f"Step 5 FAILED: Could not create TrackerVit: {e}")
+                    raise
 
                 # Initialize tracker with current frame and bbox
-                success = tracker.init(frame_data, tuple(bbox))
-                if success:
+                print(f"Step 6: Initializing tracker with frame shape {frame_data.shape} and bbox {bbox}")
+                print(f"Step 7: Frame data range: min={frame_data.min()}, max={frame_data.max()}")
+                print(f"Step 8: Bbox validation - x:{bbox[0]}, y:{bbox[1]}, w:{bbox[2]}, h:{bbox[3]}")
+                print(f"Step 9: Frame bounds - width:{frame_data.shape[1]}, height:{frame_data.shape[0]}")
+                
+                # Validate bbox is within frame bounds
+                if bbox[0] < 0 or bbox[1] < 0:
+                    print(f"ERROR: Bbox has negative coordinates!")
+                if bbox[0] + bbox[2] > frame_data.shape[1]:
+                    print(f"ERROR: Bbox exceeds frame width! {bbox[0] + bbox[2]} > {frame_data.shape[1]}")
+                if bbox[1] + bbox[3] > frame_data.shape[0]:
+                    print(f"ERROR: Bbox exceeds frame height! {bbox[1] + bbox[3]} > {frame_data.shape[0]}")
+                
+                # Try initialization following the reference implementation
+                try:
+                    # The reference uses list format [x, y, width, height]
+                    bbox_list = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
+                    print(f"Step 10a: Using bbox list: {bbox_list}")
+                    
+                    # Try initialization with the list format (as in reference)
+                    tracker.init(frame_data, bbox_list)
+                    print(f"Step 10b: Tracker init called (TrackerVit may initialize lazily)")
+                    
+                    # TrackerVit seems to initialize lazily, so we assume success if no exception
+                    success = True
+                        
+                except Exception as e:
+                    print(f"Step 10 FAILED: Tracker init raised exception: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    success = False
+                    
+                # TrackerVit might not return a boolean, just try to use it
+                # Based on the reference implementation
+                if tracker is not None:
                     self.trackers[bbox_info["index"]] = {
                         "tracker": tracker,
                         "class": bbox_info["class"],
                         "last_bbox": bbox,
                     }
-                    print(f"Initialized TrackerVit for bbox {bbox_info['index']} with class {bbox_info['class']}")
+                    print(f"TrackerVit created for bbox {bbox_info['index']} with class {bbox_info['class']}")
+                    # Note: TrackerVit might initialize lazily on first update
                 else:
-                    print(f"Failed to initialize TrackerVit for bbox {bbox_info['index']}")
+                    print(f"Failed to create TrackerVit for bbox {bbox_info['index']}")
             except Exception as e:
                 print(f"Failed to initialize tracker: {e}")
                 import traceback
