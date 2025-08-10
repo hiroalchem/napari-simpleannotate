@@ -32,9 +32,11 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
+import cv2
 import numpy as np
 import yaml
 import zarr
+from napari._qt.qthreading import create_worker
 from napari.utils.notifications import show_warning
 from napari_video.napari_video import VideoReaderNP
 from qtpy.QtWidgets import (
@@ -51,6 +53,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 from skimage import io
+from skimage.color import gray2rgb
 
 from ._utils import find_missing_number, xywh2xyxy
 
@@ -362,6 +365,26 @@ class BboxVideoQWidget(QWidget):
         self.save_button = QPushButton("Save Annotations", self)
         self.save_button.clicked.connect(self.saveAnnotations)
 
+        # Create tracking control buttons
+        self.start_tracking_button = QPushButton("Start Auto Tracking", self)
+        self.start_tracking_button.clicked.connect(self.start_tracking)
+        self.start_tracking_button.setEnabled(False)
+
+        self.stop_tracking_button = QPushButton("Stop Tracking", self)
+        self.stop_tracking_button.clicked.connect(self.stop_tracking)
+        self.stop_tracking_button.setEnabled(False)
+
+        # Create tracking status label
+        self.tracking_status_label = QLabel("Tracking: Not started", self)
+
+        # Create checkbox for track all bboxes option
+        self.track_all_checkbox = QCheckBox("Track all bounding boxes", self)
+        self.track_all_checkbox.setChecked(True)
+        self.track_all_checkbox.setToolTip(
+            "When checked, tracks all bounding boxes in the current frame.\n"
+            "When unchecked, tracks only the selected bounding box."
+        )
+
         # Set the layout
         layout = QVBoxLayout()
         layout.addWidget(self.open_video_button)
@@ -378,6 +401,11 @@ class BboxVideoQWidget(QWidget):
         layout.addWidget(self.add_class_button)
         layout.addWidget(self.del_class_button)
         layout.addWidget(self.save_button)
+        layout.addWidget(QLabel("Auto Tracking:"))
+        layout.addWidget(self.track_all_checkbox)
+        layout.addWidget(self.start_tracking_button)
+        layout.addWidget(self.stop_tracking_button)
+        layout.addWidget(self.tracking_status_label)
         self.setLayout(layout)
 
     def initVariables(self):
@@ -401,6 +429,8 @@ class BboxVideoQWidget(QWidget):
         self.video_layer = None
         self.order = 0  # 桁数
         self.frame_cache = None  # Video frame cache
+        self._tracking_worker = None
+        self.trackers = {}  # Dictionary to store trackers for each bounding box
 
     def initLayers(self):
         """Initializes the video and shapes layers in the napari viewer."""
@@ -802,6 +832,9 @@ class BboxVideoQWidget(QWidget):
             # Enable navigation buttons
             self.jump_prev_button.setEnabled(True)
             self.jump_next_button.setEnabled(True)
+
+            # Enable tracking button if video is loaded
+            self.start_tracking_button.setEnabled(True)
 
         except Exception as e:
             print(f"Failed to load video: {e}")
@@ -1341,3 +1374,258 @@ class BboxVideoQWidget(QWidget):
             print(f"Jumped to next annotation at frame {target_frame}")
         else:
             print("No next annotations found")
+
+    def get_current_bounding_boxes(self):
+        """Get all bounding boxes in the current frame."""
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        current_bboxes = []
+
+        for i, shape in enumerate(shapes_layer.data):
+            if len(shape) == 4:  # Rectangle shape
+                frame = int(shape[0][0])
+                if frame == self.current_frame:
+                    # Extract bounding box coordinates
+                    y_coords = [point[1] for point in shape]
+                    x_coords = [point[2] for point in shape]
+
+                    x1, x2 = min(x_coords), max(x_coords)
+                    y1, y2 = min(y_coords), max(y_coords)
+
+                    # Store bbox info with index and class
+                    bbox_info = {
+                        "index": i,
+                        "bbox": [int(x1), int(y1), int(x2 - x1), int(y2 - y1)],  # [x, y, width, height]
+                        "class": (
+                            shapes_layer.features["class"][i]
+                            if i < len(shapes_layer.features["class"])
+                            else "0: Unknown"
+                        ),
+                    }
+                    current_bboxes.append(bbox_info)
+
+        return current_bboxes
+
+    def start_tracking(self):
+        """Start automatic tracking of bounding boxes."""
+        if self._tracking_worker is not None:
+            QMessageBox.warning(self, "Warning", "Tracking is already running")
+            return
+
+        # Get current bounding boxes
+        current_bboxes = self.get_current_bounding_boxes()
+
+        if not current_bboxes:
+            QMessageBox.information(self, "Info", "No bounding boxes found in current frame")
+            return
+
+        # Check if we should track all or just selected
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        selected_indices = list(shapes_layer.selected_data)
+
+        if not self.track_all_checkbox.isChecked() and selected_indices:
+            # Track only selected bboxes
+            bboxes_to_track = [bbox for bbox in current_bboxes if bbox["index"] in selected_indices]
+            if not bboxes_to_track:
+                QMessageBox.information(self, "Info", "No selected bounding boxes in current frame")
+                return
+        else:
+            # Track all bboxes in current frame
+            bboxes_to_track = current_bboxes
+
+        # Update UI
+        self.start_tracking_button.setEnabled(False)
+        self.stop_tracking_button.setEnabled(True)
+        self.tracking_status_label.setText("Tracking: Initializing...")
+
+        # Create and start worker
+        self._tracking_worker = create_worker(self._perform_tracking, bboxes_to_track)
+        self._tracking_worker.started.connect(lambda: print("Tracking started..."))
+        self._tracking_worker.yielded.connect(self._update_tracking_result)
+        self._tracking_worker.finished.connect(self._tracking_finished)
+        self._tracking_worker.start()
+
+    def _perform_tracking(self, bboxes_to_track):
+        """Perform the actual tracking in a worker thread."""
+        if not self.video_layer:
+            yield None, "No video layer found"
+            return
+
+        # Initialize trackers for each bounding box
+        self.trackers = {}
+        current_frame = self.current_frame
+        
+        print(f"Starting tracking from frame {current_frame} with {len(bboxes_to_track)} bounding boxes")
+
+        # Get current frame image
+        if hasattr(self.video_layer.data, "__getitem__"):
+            try:
+                frame_data = self.video_layer.data[current_frame]
+                print(f"Frame data shape: {frame_data.shape}, dtype: {frame_data.dtype}")
+            except Exception as e:
+                print(f"Error accessing frame {current_frame}: {e}")
+                yield None, f"Cannot access frame {current_frame}"
+                return
+        else:
+            yield None, "Cannot access video data"
+            return
+
+        # Convert to RGB if needed (ensure correct format for OpenCV)
+        if len(frame_data.shape) == 2:
+            frame_data = gray2rgb(frame_data)
+        elif frame_data.shape[2] == 4:  # RGBA
+            frame_data = frame_data[:, :, :3]  # Convert to RGB
+        
+        # Ensure uint8 type
+        if frame_data.dtype != np.uint8:
+            frame_data = (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
+
+        # Initialize trackers
+        for bbox_info in bboxes_to_track:
+            try:
+                # Create tracker using CSRT (more accurate than KCF)
+                tracker = cv2.TrackerCSRT_create()
+                bbox = bbox_info["bbox"]
+                print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
+
+                # Initialize tracker with current frame and bbox
+                success = tracker.init(frame_data, tuple(bbox))
+                if success:
+                    self.trackers[bbox_info["index"]] = {
+                        "tracker": tracker,
+                        "class": bbox_info["class"],
+                        "last_bbox": bbox,
+                    }
+                    print(f"Initialized tracker for bbox {bbox_info['index']} with class {bbox_info['class']}")
+                else:
+                    print(f"Failed to initialize tracker for bbox {bbox_info['index']}")
+            except Exception as e:
+                print(f"Failed to initialize tracker: {e}")
+                import traceback
+                traceback.print_exc()
+
+        if not self.trackers:
+            yield None, "Failed to initialize any trackers"
+            return
+        
+        print(f"Successfully initialized {len(self.trackers)} trackers")
+
+        # Track through subsequent frames
+        for frame_idx in range(current_frame + 1, self.total_frames):
+            # Get frame data
+            try:
+                frame_data = self.video_layer.data[frame_idx]
+                if len(frame_data.shape) == 2:
+                    frame_data = gray2rgb(frame_data)
+                elif frame_data.shape[2] == 4:  # RGBA
+                    frame_data = frame_data[:, :, :3]  # Convert to RGB
+                
+                # Ensure uint8 type
+                if frame_data.dtype != np.uint8:
+                    frame_data = (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
+                    
+            except Exception as e:
+                print(f"Error reading frame {frame_idx}: {e}")
+                continue
+
+            # Update each tracker
+            tracked_bboxes = []
+            failed_trackers = []
+
+            for original_idx, tracker_info in list(self.trackers.items()):
+                try:
+                    # Update tracker
+                    success, bbox = tracker_info["tracker"].update(frame_data)
+
+                    if success:
+                        # Convert bbox to integers
+                        bbox = [int(v) for v in bbox]
+                        tracker_info["last_bbox"] = bbox
+
+                        tracked_bboxes.append(
+                            {
+                                "frame": frame_idx,
+                                "bbox": bbox,
+                                "class": tracker_info["class"],
+                                "original_idx": original_idx,
+                            }
+                        )
+                    else:
+                        failed_trackers.append(original_idx)
+                        print(f"Tracking failed for bbox {original_idx} at frame {frame_idx}")
+                except Exception as e:
+                    print(f"Error updating tracker {original_idx}: {e}")
+                    failed_trackers.append(original_idx)
+
+            # Remove failed trackers
+            for idx in failed_trackers:
+                del self.trackers[idx]
+
+            # Yield tracked bboxes for this frame
+            if tracked_bboxes:
+                yield tracked_bboxes, f"Tracked {len(tracked_bboxes)} objects at frame {frame_idx}"
+            else:
+                print(f"No objects tracked at frame {frame_idx}")
+            
+            # Stop if all trackers failed
+            if not self.trackers:
+                yield None, "All trackers failed"
+                break
+
+    def _update_tracking_result(self, result):
+        """Update UI with tracking results."""
+        data, message = result
+
+        # Update status
+        self.tracking_status_label.setText(f"Tracking: {message}")
+
+        if data is None:
+            return
+
+        # Add tracked bounding boxes to shapes layer
+        shapes_layer = self.viewer.layers["bbox_layer"]
+
+        for bbox_data in data:
+            frame = bbox_data["frame"]
+            bbox = bbox_data["bbox"]  # [x, y, width, height]
+            class_text = bbox_data["class"]
+
+            # Convert to rectangle coordinates
+            x1, y1, width, height = bbox
+            x2, y2 = x1 + width, y1 + height
+
+            # Create rectangle shape [frame, y1, x1, y2, x2]
+            rect = np.array([[frame, y1, x1], [frame, y1, x2], [frame, y2, x2], [frame, y2, x1]])
+
+            # Add to shapes
+            shapes_layer.add_rectangles([rect])
+
+            # Update features
+            current_classes = list(shapes_layer.features.get("class", []))
+            current_frames = list(shapes_layer.features.get("frame", []))
+
+            current_classes.append(class_text)
+            current_frames.append(frame)
+
+            shapes_layer.features = {"class": current_classes, "frame": current_frames}
+
+        # Update current frame display
+        self.viewer.dims.current_step = (data[0]["frame"],) + self.viewer.dims.current_step[1:]
+
+    def stop_tracking(self):
+        """Stop the tracking process."""
+        if self._tracking_worker is not None:
+            self._tracking_worker.quit()
+            self._tracking_worker = None
+            self.tracking_status_label.setText("Tracking: Stopped")
+            self.start_tracking_button.setEnabled(True)
+            self.stop_tracking_button.setEnabled(False)
+            print("Tracking stopped by user")
+
+    def _tracking_finished(self):
+        """Called when tracking is finished."""
+        self._tracking_worker = None
+        self.trackers = {}
+        self.tracking_status_label.setText("Tracking: Finished")
+        self.start_tracking_button.setEnabled(True)
+        self.stop_tracking_button.setEnabled(False)
+        print("Tracking finished")
