@@ -42,6 +42,7 @@ from napari_video.napari_video import VideoReaderNP
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QLabel,
     QLineEdit,
@@ -384,6 +385,16 @@ class BboxVideoQWidget(QWidget):
             "When checked, tracks all bounding boxes in the current frame.\n"
             "When unchecked, tracks only the selected bounding box."
         )
+        
+        # Create tracker type selection
+        self.tracker_type_label = QLabel("Tracker type:", self)
+        self.tracker_type_combo = QComboBox(self)
+        self.tracker_type_combo.addItems(["CSRT", "TrackerVit"])
+        self.tracker_type_combo.setCurrentText("CSRT")  # Default to CSRT
+        self.tracker_type_combo.setToolTip(
+            "CSRT: Works well for small objects and general tracking\n"
+            "TrackerVit: Vision Transformer based tracker (requires larger objects)"
+        )
 
         # Set the layout
         layout = QVBoxLayout()
@@ -403,6 +414,8 @@ class BboxVideoQWidget(QWidget):
         layout.addWidget(self.save_button)
         layout.addWidget(QLabel("Auto Tracking:"))
         layout.addWidget(self.track_all_checkbox)
+        layout.addWidget(self.tracker_type_label)
+        layout.addWidget(self.tracker_type_combo)
         layout.addWidget(self.start_tracking_button)
         layout.addWidget(self.stop_tracking_button)
         layout.addWidget(self.tracking_status_label)
@@ -1519,18 +1532,24 @@ class BboxVideoQWidget(QWidget):
                 print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
                 print(f"  Bbox types: {[type(v) for v in bbox]}")
                 
-                # Create TrackerVit using pre-initialized params
-                print(f"Step 1: Creating TrackerVit with pre-initialized params")
-                
-                if self.vit_params is None:
-                    print("ERROR: TrackerVit params not initialized")
-                    continue
+                # Create tracker based on user selection
+                tracker_type = self.tracker_type_combo.currentText()
+                print(f"Creating {tracker_type} tracker")
                 
                 try:
-                    tracker = cv2.TrackerVit_create(self.vit_params)
-                    print(f"Step 2: TrackerVit created successfully: {tracker}")
+                    if tracker_type == "CSRT":
+                        tracker = cv2.TrackerCSRT_create()
+                        print(f"CSRT tracker created successfully: {tracker}")
+                    elif tracker_type == "TrackerVit":
+                        if self.vit_params is None:
+                            print("ERROR: TrackerVit params not initialized")
+                            continue
+                        tracker = cv2.TrackerVit_create(self.vit_params)
+                        print(f"TrackerVit created successfully: {tracker}")
+                    else:
+                        raise ValueError(f"Unknown tracker type: {tracker_type}")
                 except Exception as e:
-                    print(f"Step 2 FAILED: Could not create TrackerVit: {e}")
+                    print(f"Failed to create {tracker_type} tracker: {e}")
                     raise
 
                 # Following reference implementation exactly
@@ -1539,10 +1558,9 @@ class BboxVideoQWidget(QWidget):
                     # coords[0] in reference is [x, y, width, height]
                     print(f"Step 3: Calling tracker.init with bbox: {bbox}")
                     
-                    # Initialize exactly as in reference: self.tracker.init(image, coords[0])
-                    # The reference implementation doesn't check the return value
+                    # Initialize tracker
                     tracker.init(frame_data, bbox)
-                    print(f"Step 4: Tracker.init called (reference doesn't check return value)")
+                    print(f"Tracker.init called for {tracker_type}")
                     
                     # Store tracker info
                     self.trackers[bbox_info["index"]] = {
