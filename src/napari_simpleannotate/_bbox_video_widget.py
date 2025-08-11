@@ -1514,7 +1514,10 @@ class BboxVideoQWidget(QWidget):
         for bbox_info in bboxes_to_track:
             try:
                 bbox = bbox_info["bbox"]
+                # Ensure bbox values are Python int (not numpy int) 
+                bbox = [int(v) for v in bbox]
                 print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
+                print(f"  Bbox types: {[type(v) for v in bbox]}")
                 
                 # Create TrackerVit using pre-initialized params
                 print(f"Step 1: Creating TrackerVit with pre-initialized params")
@@ -1537,8 +1540,9 @@ class BboxVideoQWidget(QWidget):
                     print(f"Step 3: Calling tracker.init with bbox: {bbox}")
                     
                     # Initialize exactly as in reference: self.tracker.init(image, coords[0])
-                    init_result = tracker.init(frame_data, bbox)
-                    print(f"Step 4: Tracker.init completed - result: {init_result}")
+                    # The reference implementation doesn't check the return value
+                    tracker.init(frame_data, bbox)
+                    print(f"Step 4: Tracker.init called (reference doesn't check return value)")
                     
                     # Store tracker info
                     self.trackers[bbox_info["index"]] = {
