@@ -1677,6 +1677,11 @@ class BboxVideoQWidget(QWidget):
 
         # Add tracked bounding boxes to shapes layer
         shapes_layer = self.viewer.layers["bbox_layer"]
+        
+        # Collect all rectangles and features first
+        rectangles_to_add = []
+        classes_to_add = []
+        frames_to_add = []
 
         for bbox_data in data:
             frame = bbox_data["frame"]
@@ -1689,17 +1694,33 @@ class BboxVideoQWidget(QWidget):
 
             # Create rectangle shape [frame, y1, x1, y2, x2]
             rect = np.array([[frame, y1, x1], [frame, y1, x2], [frame, y2, x2], [frame, y2, x1]])
+            
+            rectangles_to_add.append(rect)
+            classes_to_add.append(class_text)
+            frames_to_add.append(frame)
 
-            # Add to shapes
-            shapes_layer.add_rectangles([rect])
-
-            # Update features
+        # Add all rectangles at once
+        if rectangles_to_add:
+            shapes_layer.add_rectangles(rectangles_to_add)
+            
+            # Update features after adding all shapes
             current_classes = list(shapes_layer.features.get("class", []))
             current_frames = list(shapes_layer.features.get("frame", []))
-
-            current_classes.append(class_text)
-            current_frames.append(frame)
-
+            
+            current_classes.extend(classes_to_add)
+            current_frames.extend(frames_to_add)
+            
+            # Ensure features length matches number of shapes
+            if len(current_classes) != shapes_layer.nshapes:
+                print(f"Warning: Feature length mismatch. Shapes: {shapes_layer.nshapes}, Classes: {len(current_classes)}")
+                # Trim or pad to match
+                current_classes = current_classes[:shapes_layer.nshapes]
+                current_frames = current_frames[:shapes_layer.nshapes]
+                # Pad if necessary
+                while len(current_classes) < shapes_layer.nshapes:
+                    current_classes.append("0: Unknown")
+                    current_frames.append(0)
+            
             shapes_layer.features = {"class": current_classes, "frame": current_frames}
 
         # Update current frame display
