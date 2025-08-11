@@ -431,6 +431,19 @@ class BboxVideoQWidget(QWidget):
         self.frame_cache = None  # Video frame cache
         self._tracking_worker = None
         self.trackers = {}  # Dictionary to store trackers for each bounding box
+        
+        # Pre-create TrackerVit params for reuse
+        try:
+            self.vit_params = cv2.TrackerVit_Params()
+            import pathlib
+            model_path = pathlib.Path(__file__).parent.parent.parent / "model" / "vit" / "object_tracking_vittrack_2023sep.onnx"
+            if not model_path.exists():
+                model_path = pathlib.Path("/Users/hiroki/vscode/napari-simpleannotate/model/vit/object_tracking_vittrack_2023sep.onnx")
+            self.vit_params.net = str(model_path)
+            print(f"TrackerVit params initialized with model: {self.vit_params.net}")
+        except Exception as e:
+            print(f"Could not initialize TrackerVit params: {e}")
+            self.vit_params = None
 
     def initLayers(self):
         """Initializes the video and shapes layers in the napari viewer."""
@@ -1486,9 +1499,14 @@ class BboxVideoQWidget(QWidget):
         elif frame_data.shape[2] == 4:  # RGBA
             frame_data = frame_data[:, :, :3]  # Convert to RGB
         
-        # Ensure uint8 type
+        # Ensure uint8 type and contiguous memory
         if frame_data.dtype != np.uint8:
             frame_data = (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
+        
+        # Make sure the array is C-contiguous for OpenCV
+        if not frame_data.flags['C_CONTIGUOUS']:
+            frame_data = np.ascontiguousarray(frame_data)
+            print("Made frame data contiguous")
 
         # Initialize trackers
         for bbox_info in bboxes_to_track:
@@ -1496,76 +1514,43 @@ class BboxVideoQWidget(QWidget):
                 bbox = bbox_info["bbox"]
                 print(f"Initializing tracker with bbox: {bbox} for class: {bbox_info['class']}")
                 
-                # Create TrackerVit with model
-                print(f"Step 1: Creating TrackerVit_Params...")
-                params = cv2.TrackerVit_Params()
+                # Create TrackerVit using pre-initialized params
+                print(f"Step 1: Creating TrackerVit with pre-initialized params")
                 
-                # Get model path relative to this file
-                import pathlib
-                model_path = pathlib.Path(__file__).parent.parent.parent / "model" / "vit" / "object_tracking_vittrack_2023sep.onnx"
-                if not model_path.exists():
-                    print(f"Warning: Model file not found at {model_path}")
-                    # Try absolute path as fallback
-                    model_path = pathlib.Path("/Users/hiroki/vscode/napari-simpleannotate/model/vit/object_tracking_vittrack_2023sep.onnx")
-                
-                print(f"Step 2: Model path: {model_path}")
-                print(f"Step 3: Model exists: {model_path.exists()}")
-                
-                params.net = str(model_path)
-                print(f"Step 4: Creating TrackerVit with params.net = {params.net}")
+                if self.vit_params is None:
+                    print("ERROR: TrackerVit params not initialized")
+                    continue
                 
                 try:
-                    tracker = cv2.TrackerVit_create(params)
-                    print(f"Step 5: TrackerVit created successfully: {tracker}")
+                    tracker = cv2.TrackerVit_create(self.vit_params)
+                    print(f"Step 2: TrackerVit created successfully: {tracker}")
                 except Exception as e:
-                    print(f"Step 5 FAILED: Could not create TrackerVit: {e}")
+                    print(f"Step 2 FAILED: Could not create TrackerVit: {e}")
                     raise
 
-                # Initialize tracker with current frame and bbox
-                print(f"Step 6: Initializing tracker with frame shape {frame_data.shape} and bbox {bbox}")
-                print(f"Step 7: Frame data range: min={frame_data.min()}, max={frame_data.max()}")
-                print(f"Step 8: Bbox validation - x:{bbox[0]}, y:{bbox[1]}, w:{bbox[2]}, h:{bbox[3]}")
-                print(f"Step 9: Frame bounds - width:{frame_data.shape[1]}, height:{frame_data.shape[0]}")
-                
-                # Validate bbox is within frame bounds
-                if bbox[0] < 0 or bbox[1] < 0:
-                    print(f"ERROR: Bbox has negative coordinates!")
-                if bbox[0] + bbox[2] > frame_data.shape[1]:
-                    print(f"ERROR: Bbox exceeds frame width! {bbox[0] + bbox[2]} > {frame_data.shape[1]}")
-                if bbox[1] + bbox[3] > frame_data.shape[0]:
-                    print(f"ERROR: Bbox exceeds frame height! {bbox[1] + bbox[3]} > {frame_data.shape[0]}")
-                
-                # Try initialization following the reference implementation
+                # Following reference implementation exactly
                 try:
-                    # The reference uses list format [x, y, width, height]
-                    bbox_list = [int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])]
-                    print(f"Step 10a: Using bbox list: {bbox_list}")
+                    # Reference implementation uses the bbox directly as a list
+                    # coords[0] in reference is [x, y, width, height]
+                    print(f"Step 3: Calling tracker.init with bbox: {bbox}")
                     
-                    # Try initialization with the list format (as in reference)
-                    tracker.init(frame_data, bbox_list)
-                    print(f"Step 10b: Tracker init called (TrackerVit may initialize lazily)")
+                    # Initialize exactly as in reference: self.tracker.init(image, coords[0])
+                    tracker.init(frame_data, bbox)
+                    print(f"Step 4: Tracker.init completed")
                     
-                    # TrackerVit seems to initialize lazily, so we assume success if no exception
-                    success = True
-                        
-                except Exception as e:
-                    print(f"Step 10 FAILED: Tracker init raised exception: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    success = False
-                    
-                # TrackerVit might not return a boolean, just try to use it
-                # Based on the reference implementation
-                if tracker is not None:
+                    # Store tracker info
                     self.trackers[bbox_info["index"]] = {
                         "tracker": tracker,
                         "class": bbox_info["class"],
                         "last_bbox": bbox,
+                        "init_frame": current_frame  # Track which frame was used for init
                     }
-                    print(f"TrackerVit created for bbox {bbox_info['index']} with class {bbox_info['class']}")
-                    # Note: TrackerVit might initialize lazily on first update
-                else:
-                    print(f"Failed to create TrackerVit for bbox {bbox_info['index']}")
+                    print(f"TrackerVit stored for bbox {bbox_info['index']} with class {bbox_info['class']}")
+                        
+                except Exception as e:
+                    print(f"Tracker init raised exception: {e}")
+                    import traceback
+                    traceback.print_exc()
             except Exception as e:
                 print(f"Failed to initialize tracker: {e}")
                 import traceback
@@ -1602,12 +1587,20 @@ class BboxVideoQWidget(QWidget):
             for original_idx, tracker_info in list(self.trackers.items()):
                 try:
                     # Update tracker
-                    success, bbox = tracker_info["tracker"].update(frame_data)
-
-                    if success:
+                    print(f"  Updating tracker {original_idx} at frame {frame_idx}")
+                    print(f"  Frame shape: {frame_data.shape}, dtype: {frame_data.dtype}")
+                    print(f"  Last bbox: {tracker_info['last_bbox']}")
+                    
+                    # Reference implementation shows: ok, bbox = self.tracker.update(image)
+                    ok, bbox = tracker_info["tracker"].update(frame_data)
+                    print(f"  Update result - ok: {ok}, bbox: {bbox}")
+                    print(f"  Types - ok: {type(ok)}, bbox: {type(bbox)}")
+                    
+                    if ok:
                         # Convert bbox to integers
                         bbox = [int(v) for v in bbox]
                         tracker_info["last_bbox"] = bbox
+                        print(f"  Tracking succeeded with new bbox: {bbox}")
 
                         tracked_bboxes.append(
                             {
@@ -1619,9 +1612,11 @@ class BboxVideoQWidget(QWidget):
                         )
                     else:
                         failed_trackers.append(original_idx)
-                        print(f"Tracking failed for bbox {original_idx} at frame {frame_idx}")
+                        print(f"  Tracking failed for bbox {original_idx} at frame {frame_idx}")
                 except Exception as e:
-                    print(f"Error updating tracker {original_idx}: {e}")
+                    print(f"  Error updating tracker {original_idx}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     failed_trackers.append(original_idx)
 
             # Remove failed trackers
