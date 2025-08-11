@@ -1507,6 +1507,8 @@ class BboxVideoQWidget(QWidget):
         if not frame_data.flags['C_CONTIGUOUS']:
             frame_data = np.ascontiguousarray(frame_data)
             print("Made frame data contiguous")
+        
+        print(f"After conversion - shape: {frame_data.shape}, dtype: {frame_data.dtype}, min/max: {frame_data.min()}/{frame_data.max()}, contiguous: {frame_data.flags['C_CONTIGUOUS']}")
 
         # Initialize trackers
         for bbox_info in bboxes_to_track:
@@ -1535,8 +1537,8 @@ class BboxVideoQWidget(QWidget):
                     print(f"Step 3: Calling tracker.init with bbox: {bbox}")
                     
                     # Initialize exactly as in reference: self.tracker.init(image, coords[0])
-                    tracker.init(frame_data, bbox)
-                    print(f"Step 4: Tracker.init completed")
+                    init_result = tracker.init(frame_data, bbox)
+                    print(f"Step 4: Tracker.init completed - result: {init_result}")
                     
                     # Store tracker info
                     self.trackers[bbox_info["index"]] = {
@@ -1589,7 +1591,14 @@ class BboxVideoQWidget(QWidget):
                     # Update tracker
                     print(f"  Updating tracker {original_idx} at frame {frame_idx}")
                     print(f"  Frame shape: {frame_data.shape}, dtype: {frame_data.dtype}")
+                    print(f"  Frame min/max values: {frame_data.min()}/{frame_data.max()}")
+                    print(f"  Frame flags C_CONTIGUOUS: {frame_data.flags['C_CONTIGUOUS']}")
                     print(f"  Last bbox: {tracker_info['last_bbox']}")
+                    
+                    # Try to visualize what the tracker sees
+                    x, y, w, h = tracker_info['last_bbox']
+                    roi = frame_data[y:y+h, x:x+w]
+                    print(f"  ROI shape: {roi.shape}, min/max: {roi.min()}/{roi.max()}")
                     
                     # Reference implementation shows: ok, bbox = self.tracker.update(image)
                     ok, bbox = tracker_info["tracker"].update(frame_data)
