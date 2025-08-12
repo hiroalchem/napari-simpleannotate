@@ -44,12 +44,14 @@ from qtpy.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -396,6 +398,40 @@ class BboxVideoQWidget(QWidget):
             "TrackerVit: Vision Transformer based tracker (requires larger objects)"
         )
 
+        # Create crop size controls
+        self.crop_label = QLabel("Crop Settings:", self)
+        self.crop_checkbox = QCheckBox("Enable crop on save", self)
+        self.crop_checkbox.setChecked(False)
+        self.crop_checkbox.stateChanged.connect(self.on_crop_checkbox_changed)
+        
+        self.crop_size_label = QLabel("Crop size (pixels):", self)
+        self.crop_size_label.setEnabled(False)
+        
+        self.crop_width_input = QSpinBox(self)
+        self.crop_width_input.setMinimum(32)
+        self.crop_width_input.setMaximum(2048)
+        self.crop_width_input.setValue(256)
+        self.crop_width_input.setSingleStep(32)
+        self.crop_width_input.setEnabled(False)
+        self.crop_width_input.setToolTip("Width of the cropped image")
+        
+        self.crop_height_input = QSpinBox(self)
+        self.crop_height_input.setMinimum(32)
+        self.crop_height_input.setMaximum(2048)
+        self.crop_height_input.setValue(256)
+        self.crop_height_input.setSingleStep(32)
+        self.crop_height_input.setEnabled(False)
+        self.crop_height_input.setToolTip("Height of the cropped image")
+        
+        # Create crop size layout
+        crop_size_layout = QHBoxLayout()
+        crop_size_layout.addWidget(QLabel("W:"))
+        crop_size_layout.addWidget(self.crop_width_input)
+        crop_size_layout.addWidget(QLabel("H:"))
+        crop_size_layout.addWidget(self.crop_height_input)
+        crop_size_widget = QWidget()
+        crop_size_widget.setLayout(crop_size_layout)
+
         # Set the layout
         layout = QVBoxLayout()
         layout.addWidget(self.open_video_button)
@@ -419,6 +455,11 @@ class BboxVideoQWidget(QWidget):
         layout.addWidget(self.start_tracking_button)
         layout.addWidget(self.stop_tracking_button)
         layout.addWidget(self.tracking_status_label)
+        layout.addWidget(QLabel(""))  # Spacer
+        layout.addWidget(self.crop_label)
+        layout.addWidget(self.crop_checkbox)
+        layout.addWidget(self.crop_size_label)
+        layout.addWidget(crop_size_widget)
         self.setLayout(layout)
 
     def initVariables(self):
@@ -482,6 +523,13 @@ class BboxVideoQWidget(QWidget):
         # Bind keyboard shortcuts for navigation
         self.viewer.bind_key("q", self.jump_to_previous_annotation)
         self.viewer.bind_key("w", self.jump_to_next_annotation)
+    
+    def on_crop_checkbox_changed(self, state):
+        """Enable/disable crop size inputs based on checkbox state."""
+        enabled = state == 2  # Qt.Checked = 2
+        self.crop_size_label.setEnabled(enabled)
+        self.crop_width_input.setEnabled(enabled)
+        self.crop_height_input.setEnabled(enabled)
 
     def openVideo(self):
         """Open video file using file dialog."""
@@ -1315,6 +1363,11 @@ class BboxVideoQWidget(QWidget):
         if len(shapes_layer.data) == 0:
             return
 
+        # Check if cropping is enabled
+        if self.crop_checkbox.isChecked():
+            self.save_cropped_annotations()
+            return
+
         # Get unique frame numbers that have annotations
         annotated_frames = set()
         for shape in shapes_layer.data:
@@ -1340,6 +1393,157 @@ class BboxVideoQWidget(QWidget):
         except Exception as e:
             print(f"Error saving annotated frames: {e}")
             show_warning(f"Could not save some frame images: {str(e)}")
+
+    def save_cropped_annotations(self):
+        """Save cropped images for each bounding box."""
+        if not self.video_layer:
+            return
+
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        if len(shapes_layer.data) == 0:
+            return
+
+        crop_width = self.crop_width_input.value()
+        crop_height = self.crop_height_input.value()
+        
+        # Create crops directory
+        crops_dir = os.path.join(self.annotation_dir, "crops")
+        os.makedirs(crops_dir, exist_ok=True)
+        
+        # Get video dimensions
+        video_height, video_width = self.video_layer.data.shape[1:3]
+        
+        # Track which bboxes have been processed
+        processed_bboxes = set()
+        
+        try:
+            # Group bboxes by frame
+            frame_bboxes = {}
+            for i, shape in enumerate(shapes_layer.data):
+                if len(shape) == 4:  # Rectangle shape
+                    frame = int(shape[0][0])
+                    if frame not in frame_bboxes:
+                        frame_bboxes[frame] = []
+                    
+                    # Extract bbox coordinates
+                    y_coords = [point[1] for point in shape]
+                    x_coords = [point[2] for point in shape]
+                    x1, x2 = min(x_coords), max(x_coords)
+                    y1, y2 = min(y_coords), max(y_coords)
+                    
+                    # Get class info
+                    class_info = shapes_layer.features["class"][i] if i < len(shapes_layer.features["class"]) else "0: Unknown"
+                    class_num = class_info.split(":")[0].strip()
+                    
+                    frame_bboxes[frame].append({
+                        "index": i,
+                        "x1": int(x1), "y1": int(y1),
+                        "x2": int(x2), "y2": int(y2),
+                        "class": class_num
+                    })
+            
+            # Process each frame
+            for frame_idx, bboxes in frame_bboxes.items():
+                frame_data = self.video_layer.data[int(frame_idx)]
+                
+                for bbox_idx, bbox in enumerate(bboxes):
+                    if bbox["index"] in processed_bboxes:
+                        continue
+                    
+                    # Calculate crop center
+                    cx = (bbox["x1"] + bbox["x2"]) // 2
+                    cy = (bbox["y1"] + bbox["y2"]) // 2
+                    
+                    # Calculate crop boundaries
+                    crop_x1 = cx - crop_width // 2
+                    crop_y1 = cy - crop_height // 2
+                    crop_x2 = crop_x1 + crop_width
+                    crop_y2 = crop_y1 + crop_height
+                    
+                    # Check if bbox crosses crop boundary (ignore if it does)
+                    bbox_width = bbox["x2"] - bbox["x1"]
+                    bbox_height = bbox["y2"] - bbox["y1"]
+                    
+                    # Calculate bbox position relative to crop
+                    rel_x1 = bbox["x1"] - crop_x1
+                    rel_y1 = bbox["y1"] - crop_y1
+                    rel_x2 = bbox["x2"] - crop_x1
+                    rel_y2 = bbox["y2"] - crop_y1
+                    
+                    # Skip if bbox crosses crop boundary
+                    if (rel_x1 < 0 or rel_y1 < 0 or 
+                        rel_x2 > crop_width or rel_y2 > crop_height):
+                        print(f"Skipping bbox {bbox['index']} - crosses crop boundary")
+                        continue
+                    
+                    # Adjust crop boundaries to fit within image
+                    if crop_x1 < 0:
+                        crop_x2 -= crop_x1
+                        crop_x1 = 0
+                    if crop_y1 < 0:
+                        crop_y2 -= crop_y1
+                        crop_y1 = 0
+                    if crop_x2 > video_width:
+                        crop_x1 -= (crop_x2 - video_width)
+                        crop_x2 = video_width
+                    if crop_y2 > video_height:
+                        crop_y1 -= (crop_y2 - video_height)
+                        crop_y2 = video_height
+                    
+                    # Ensure crop is still valid size
+                    if crop_x1 < 0 or crop_y1 < 0 or crop_x2 > video_width or crop_y2 > video_height:
+                        print(f"Skipping bbox {bbox['index']} - cannot fit crop in image")
+                        continue
+                    
+                    # Extract crop
+                    crop = frame_data[crop_y1:crop_y2, crop_x1:crop_x2]
+                    
+                    # Save crop
+                    crop_filename = f"frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
+                    crop_path = os.path.join(crops_dir, crop_filename)
+                    io.imsave(crop_path, crop)
+                    print(f"Saved crop: {crop_filename}")
+                    
+                    # Mark this bbox as processed
+                    processed_bboxes.add(bbox["index"])
+                    
+                    # Check if other bboxes are contained in this crop
+                    for other_bbox in bboxes:
+                        if other_bbox["index"] in processed_bboxes:
+                            continue
+                        
+                        # Check if other bbox is fully contained in crop
+                        if (other_bbox["x1"] >= crop_x1 and other_bbox["y1"] >= crop_y1 and
+                            other_bbox["x2"] <= crop_x2 and other_bbox["y2"] <= crop_y2):
+                            print(f"Bbox {other_bbox['index']} is contained in crop - marking as processed")
+                            processed_bboxes.add(other_bbox["index"])
+                    
+                    # Also save the annotation in YOLO format for this crop
+                    annotation_filename = crop_filename.replace(".png", ".txt")
+                    annotation_path = os.path.join(crops_dir, annotation_filename)
+                    
+                    with open(annotation_path, "w") as f:
+                        # Calculate relative positions for all bboxes in this crop
+                        for contained_bbox in bboxes:
+                            if contained_bbox["index"] not in processed_bboxes:
+                                continue
+                            
+                            # Check if bbox is within crop
+                            if (contained_bbox["x1"] >= crop_x1 and contained_bbox["y1"] >= crop_y1 and
+                                contained_bbox["x2"] <= crop_x2 and contained_bbox["y2"] <= crop_y2):
+                                # Convert to YOLO format relative to crop
+                                rel_cx = ((contained_bbox["x1"] + contained_bbox["x2"]) / 2 - crop_x1) / crop_width
+                                rel_cy = ((contained_bbox["y1"] + contained_bbox["y2"]) / 2 - crop_y1) / crop_height
+                                rel_w = (contained_bbox["x2"] - contained_bbox["x1"]) / crop_width
+                                rel_h = (contained_bbox["y2"] - contained_bbox["y1"]) / crop_height
+                                
+                                f.write(f"{contained_bbox['class']} {rel_cx:.6f} {rel_cy:.6f} {rel_w:.6f} {rel_h:.6f}\n")
+            
+            print(f"Saved {len(processed_bboxes)} cropped annotations")
+                
+        except Exception as e:
+            print(f"Error saving cropped annotations: {e}")
+            show_warning(f"Could not save cropped annotations: {str(e)}")
 
     def jump_to_previous_annotation(self, viewer=None):
         """Jump to the nearest annotation before the current frame."""
