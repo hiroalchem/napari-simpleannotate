@@ -451,12 +451,25 @@ class BboxVideoQWidget(QWidget):
         self.crop_height_input.setEnabled(False)
         self.crop_height_input.setToolTip("Height of the cropped image")
         
-        # Create crop size layout
-        crop_size_layout = QHBoxLayout()
-        crop_size_layout.addWidget(QLabel("W:"))
-        crop_size_layout.addWidget(self.crop_width_input)
-        crop_size_layout.addWidget(QLabel("H:"))
-        crop_size_layout.addWidget(self.crop_height_input)
+        # Create crop size layout - vertical arrangement
+        crop_size_layout = QVBoxLayout()
+        
+        # Width control
+        width_layout = QHBoxLayout()
+        width_layout.addWidget(QLabel("Width:"))
+        width_layout.addWidget(self.crop_width_input)
+        width_widget = QWidget()
+        width_widget.setLayout(width_layout)
+        
+        # Height control
+        height_layout = QHBoxLayout()
+        height_layout.addWidget(QLabel("Height:"))
+        height_layout.addWidget(self.crop_height_input)
+        height_widget = QWidget()
+        height_widget.setLayout(height_layout)
+        
+        crop_size_layout.addWidget(width_widget)
+        crop_size_layout.addWidget(height_widget)
         crop_size_widget = QWidget()
         crop_size_widget.setLayout(crop_size_layout)
 
@@ -490,13 +503,9 @@ class BboxVideoQWidget(QWidget):
         layout.addWidget(crop_label)
         layout.addWidget(self.crop_checkbox)
         
-        # Combine crop size label and inputs on same line
-        crop_controls_layout = QHBoxLayout()
-        crop_controls_layout.addWidget(self.crop_size_label)
-        crop_controls_layout.addWidget(crop_size_widget)
-        crop_controls_widget = QWidget()
-        crop_controls_widget.setLayout(crop_controls_layout)
-        layout.addWidget(crop_controls_widget)
+        # Add crop size controls
+        layout.addWidget(self.crop_size_label)
+        layout.addWidget(crop_size_widget)
         
         # Set maximum width for the widget
         self.setMaximumWidth(300)
