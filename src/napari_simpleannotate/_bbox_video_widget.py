@@ -428,7 +428,6 @@ class BboxVideoQWidget(QWidget):
         tracker_type_widget.setLayout(tracker_type_layout)
 
         # Create crop size controls
-        self.crop_label = QLabel("Crop Settings:", self)
         self.crop_checkbox = QCheckBox("Enable crop on save", self)
         self.crop_checkbox.setChecked(False)
         self.crop_checkbox.stateChanged.connect(self.on_crop_checkbox_changed)
@@ -498,6 +497,9 @@ class BboxVideoQWidget(QWidget):
         crop_controls_widget = QWidget()
         crop_controls_widget.setLayout(crop_controls_layout)
         layout.addWidget(crop_controls_widget)
+        
+        # Set maximum width for the widget
+        self.setMaximumWidth(300)
         
         self.setLayout(layout)
 
