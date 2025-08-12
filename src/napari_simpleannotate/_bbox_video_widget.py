@@ -318,12 +318,10 @@ class BboxVideoQWidget(QWidget):
 
         # Create checkbox for zarr conversion (DISABLED for now - future improvement)
         # TODO: Re-enable zarr functionality after resolving conversion speed and compatibility issues
-        self.use_zarr_checkbox = QCheckBox("Use Zarr for faster loading (Experimental - Disabled)", self)
+        self.use_zarr_checkbox = QCheckBox("Use Zarr (Disabled)", self)
         self.use_zarr_checkbox.setChecked(False)  # Always disabled for now
         self.use_zarr_checkbox.setEnabled(False)  # Disable the checkbox
-        self.use_zarr_checkbox.setToolTip(
-            "Convert video to Zarr format for memory-efficient fast loading\n(Currently disabled - using frame cache instead)"
-        )
+        self.use_zarr_checkbox.setVisible(False)  # Hide it to save space
 
         # Create progress bar for zarr conversion (hidden when zarr is disabled)
         self.progress_bar = QProgressBar(self)
@@ -337,45 +335,74 @@ class BboxVideoQWidget(QWidget):
 
         # Create label to show cache info
         self.cache_info_label = QLabel("Cache: disabled", self)
+        
+        # Create horizontal layout for frame and cache info
+        info_layout = QHBoxLayout()
+        info_layout.addWidget(self.frame_info_label)
+        info_layout.addWidget(self.cache_info_label)
+        info_widget = QWidget()
+        info_widget.setLayout(info_layout)
 
         # Create navigation buttons for jumping to annotations
-        self.jump_prev_button = QPushButton("← Previous Annotation (Q)", self)
+        self.jump_prev_button = QPushButton("← Prev (Q)", self)
         self.jump_prev_button.clicked.connect(self.jump_to_previous_annotation)
         self.jump_prev_button.setEnabled(False)
 
-        self.jump_next_button = QPushButton("Next Annotation (W) →", self)
+        self.jump_next_button = QPushButton("Next (W) →", self)
         self.jump_next_button.clicked.connect(self.jump_to_next_annotation)
         self.jump_next_button.setEnabled(False)
+        
+        # Create horizontal layout for navigation buttons
+        nav_layout = QHBoxLayout()
+        nav_layout.addWidget(self.jump_prev_button)
+        nav_layout.addWidget(self.jump_next_button)
+        nav_widget = QWidget()
+        nav_widget.setLayout(nav_layout)
 
         # Create a list widget for displaying the list of classes
         self.classlistWidget = QListWidget()
         self.classlistWidget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.classlistWidget.itemClicked.connect(self.class_clicked)
+        self.classlistWidget.setMaximumHeight(100)  # Limit height to save space
 
         # Create text box for entering the class names
         self.class_textbox = QLineEdit()
         self.class_textbox.setPlaceholderText("Enter class name")
 
         # Create button for adding class to classlist
-        self.add_class_button = QPushButton("Add class", self)
+        self.add_class_button = QPushButton("Add", self)
         self.add_class_button.clicked.connect(self.add_class)
 
         # Create button for deleting class from classlist
-        self.del_class_button = QPushButton("Delete selected class", self)
+        self.del_class_button = QPushButton("Delete", self)
         self.del_class_button.clicked.connect(self.del_class)
+        
+        # Create horizontal layout for class buttons
+        class_button_layout = QHBoxLayout()
+        class_button_layout.addWidget(self.add_class_button)
+        class_button_layout.addWidget(self.del_class_button)
+        class_button_widget = QWidget()
+        class_button_widget.setLayout(class_button_layout)
 
         # Create button for saving the bounding box annotations
         self.save_button = QPushButton("Save Annotations", self)
         self.save_button.clicked.connect(self.saveAnnotations)
 
         # Create tracking control buttons
-        self.start_tracking_button = QPushButton("Start Auto Tracking", self)
+        self.start_tracking_button = QPushButton("Start", self)
         self.start_tracking_button.clicked.connect(self.start_tracking)
         self.start_tracking_button.setEnabled(False)
 
-        self.stop_tracking_button = QPushButton("Stop Tracking", self)
+        self.stop_tracking_button = QPushButton("Stop", self)
         self.stop_tracking_button.clicked.connect(self.stop_tracking)
         self.stop_tracking_button.setEnabled(False)
+        
+        # Create horizontal layout for tracking buttons
+        tracking_button_layout = QHBoxLayout()
+        tracking_button_layout.addWidget(self.start_tracking_button)
+        tracking_button_layout.addWidget(self.stop_tracking_button)
+        tracking_button_widget = QWidget()
+        tracking_button_widget.setLayout(tracking_button_layout)
 
         # Create tracking status label
         self.tracking_status_label = QLabel("Tracking: Not started", self)
@@ -389,14 +416,16 @@ class BboxVideoQWidget(QWidget):
         )
         
         # Create tracker type selection
-        self.tracker_type_label = QLabel("Tracker type:", self)
         self.tracker_type_combo = QComboBox(self)
         self.tracker_type_combo.addItems(["CSRT", "TrackerVit"])
         self.tracker_type_combo.setCurrentText("CSRT")  # Default to CSRT
-        self.tracker_type_combo.setToolTip(
-            "CSRT: Works well for small objects and general tracking\n"
-            "TrackerVit: Vision Transformer based tracker (requires larger objects)"
-        )
+        
+        # Create horizontal layout for tracker type
+        tracker_type_layout = QHBoxLayout()
+        tracker_type_layout.addWidget(QLabel("Tracker:"))
+        tracker_type_layout.addWidget(self.tracker_type_combo)
+        tracker_type_widget = QWidget()
+        tracker_type_widget.setLayout(tracker_type_layout)
 
         # Create crop size controls
         self.crop_label = QLabel("Crop Settings:", self)
@@ -434,32 +463,42 @@ class BboxVideoQWidget(QWidget):
 
         # Set the layout
         layout = QVBoxLayout()
+        layout.setSpacing(5)  # Reduce spacing between widgets
         layout.addWidget(self.open_video_button)
         layout.addWidget(self.use_zarr_checkbox)
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.video_info_label)
-        layout.addWidget(self.frame_info_label)
-        layout.addWidget(self.cache_info_label)
-        layout.addWidget(self.jump_prev_button)
-        layout.addWidget(self.jump_next_button)
+        layout.addWidget(info_widget)  # Combined frame and cache info
+        layout.addWidget(nav_widget)  # Combined navigation buttons
         layout.addWidget(QLabel("Classes:"))
         layout.addWidget(self.classlistWidget)
         layout.addWidget(self.class_textbox)
-        layout.addWidget(self.add_class_button)
-        layout.addWidget(self.del_class_button)
+        layout.addWidget(class_button_widget)  # Combined class buttons
         layout.addWidget(self.save_button)
-        layout.addWidget(QLabel("Auto Tracking:"))
+        
+        # Tracking section with combined layout
+        tracking_label = QLabel("Auto Tracking:")
+        tracking_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(tracking_label)
         layout.addWidget(self.track_all_checkbox)
-        layout.addWidget(self.tracker_type_label)
-        layout.addWidget(self.tracker_type_combo)
-        layout.addWidget(self.start_tracking_button)
-        layout.addWidget(self.stop_tracking_button)
+        layout.addWidget(tracker_type_widget)  # Tracker type selection
+        layout.addWidget(tracking_button_widget)  # Combined tracking buttons
         layout.addWidget(self.tracking_status_label)
-        layout.addWidget(QLabel(""))  # Spacer
-        layout.addWidget(self.crop_label)
+        
+        # Crop section with combined layout
+        crop_label = QLabel("Crop Settings:")
+        crop_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(crop_label)
         layout.addWidget(self.crop_checkbox)
-        layout.addWidget(self.crop_size_label)
-        layout.addWidget(crop_size_widget)
+        
+        # Combine crop size label and inputs on same line
+        crop_controls_layout = QHBoxLayout()
+        crop_controls_layout.addWidget(self.crop_size_label)
+        crop_controls_layout.addWidget(crop_size_widget)
+        crop_controls_widget = QWidget()
+        crop_controls_widget.setLayout(crop_controls_layout)
+        layout.addWidget(crop_controls_widget)
+        
         self.setLayout(layout)
 
     def initVariables(self):
