@@ -1548,8 +1548,9 @@ class BboxVideoQWidget(QWidget):
                     # Extract crop
                     crop = frame_data[crop_y1:crop_y2, crop_x1:crop_x2]
                     
-                    # Save crop
-                    crop_filename = f"frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
+                    # Save crop with video name prefix
+                    video_name = os.path.splitext(os.path.basename(self.video_path))[0]
+                    crop_filename = f"{video_name}_frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
                     crop_path = os.path.join(crops_dir, crop_filename)
                     io.imsave(crop_path, crop)
                     print(f"Saved crop: {crop_filename}")
