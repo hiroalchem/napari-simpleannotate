@@ -1550,39 +1550,45 @@ class BboxVideoQWidget(QWidget):
                     
                     # Extract crop
                     crop = frame_data[crop_y1:crop_y2, crop_x1:crop_x2]
-                    
+
                     # Save crop with video name prefix
                     video_name = os.path.splitext(os.path.basename(self.video_path))[0]
                     crop_filename = f"{video_name}_frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
                     crop_path = os.path.join(crops_dir, crop_filename)
                     io.imsave(crop_path, crop)
                     print(f"Saved crop: {crop_filename}")
-                    
-                    # Mark this bbox as processed
+
+                    # Mark this bbox as processed (so it won't be used as crop center again)
                     processed_bboxes.add(bbox["index"])
-                    
+
+                    # Track which bboxes are in THIS specific crop (for annotation file)
+                    bboxes_in_this_crop = [bbox["index"]]  # Start with the center bbox
+
                     # Check if other bboxes are contained in this crop
                     for other_bbox in bboxes:
-                        if other_bbox["index"] in processed_bboxes:
+                        if other_bbox["index"] == bbox["index"]:  # Skip self
                             continue
-                        
+                        if other_bbox["index"] in processed_bboxes:  # Skip already processed as center
+                            continue
+
                         # Check if other bbox is fully contained in crop
                         if (other_bbox["x1"] >= crop_x1 and other_bbox["y1"] >= crop_y1 and
                             other_bbox["x2"] <= crop_x2 and other_bbox["y2"] <= crop_y2):
                             print(f"Bbox {other_bbox['index']} is contained in crop - marking as processed")
                             processed_bboxes.add(other_bbox["index"])
-                    
+                            bboxes_in_this_crop.append(other_bbox["index"])
+
                     # Also save the annotation in YOLO format for this crop
                     annotation_filename = crop_filename.replace(".png", ".txt")
                     annotation_path = os.path.join(crops_dir, annotation_filename)
-                    
+
                     with open(annotation_path, "w") as f:
-                        # Calculate relative positions for all bboxes in this crop
+                        # Write annotations for all bboxes in this crop
                         for contained_bbox in bboxes:
-                            if contained_bbox["index"] not in processed_bboxes:
+                            if contained_bbox["index"] not in bboxes_in_this_crop:
                                 continue
-                            
-                            # Check if bbox is within crop
+
+                            # Check if bbox is within crop (should always be true, but double-check)
                             if (contained_bbox["x1"] >= crop_x1 and contained_bbox["y1"] >= crop_y1 and
                                 contained_bbox["x2"] <= crop_x2 and contained_bbox["y2"] <= crop_y2):
                                 # Convert to YOLO format relative to crop
@@ -1590,7 +1596,7 @@ class BboxVideoQWidget(QWidget):
                                 rel_cy = ((contained_bbox["y1"] + contained_bbox["y2"]) / 2 - crop_y1) / crop_height
                                 rel_w = (contained_bbox["x2"] - contained_bbox["x1"]) / crop_width
                                 rel_h = (contained_bbox["y2"] - contained_bbox["y1"]) / crop_height
-                                
+
                                 f.write(f"{contained_bbox['class']} {rel_cx:.6f} {rel_cy:.6f} {rel_w:.6f} {rel_h:.6f}\n")
             
             print(f"Saved {len(processed_bboxes)} cropped annotations")
