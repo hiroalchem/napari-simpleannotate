@@ -541,8 +541,11 @@ class BboxVideoQWidget(QWidget):
             self.vit_params = cv2.TrackerVit_Params()
             import pathlib
             model_path = pathlib.Path(__file__).parent.parent.parent / "model" / "vit" / "object_tracking_vittrack_2023sep.onnx"
+            # If the default model path does not exist, check environment variable
             if not model_path.exists():
-                model_path = pathlib.Path("/Users/hiroki/vscode/napari-simpleannotate/model/vit/object_tracking_vittrack_2023sep.onnx")
+                env_model_path = os.environ.get("NAPARI_SIMPLEANNOTATE_VIT_MODEL_PATH")
+                if env_model_path and pathlib.Path(env_model_path).exists():
+                    model_path = pathlib.Path(env_model_path)
             self.vit_params.net = str(model_path)
             print(f"TrackerVit params initialized with model: {self.vit_params.net}")
         except Exception as e:
