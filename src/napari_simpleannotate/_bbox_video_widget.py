@@ -1741,14 +1741,25 @@ class BboxVideoQWidget(QWidget):
         print(f"Starting tracking from frame {current_frame} with {len(bboxes_to_track)} bounding boxes")
         print(f"OpenCV version: {cv2.__version__}")
         
-        # Check if TrackerVit is available
+        # Check if TrackerVit and CSRT are available
+        tracker_vit_available = False
+        tracker_csrt_available = False
         try:
-            test_params = cv2.TrackerVit_Params()
+            _ = cv2.TrackerVit_Params()
+            tracker_vit_available = True
             print("TrackerVit is available in this OpenCV build")
         except AttributeError:
-            print("ERROR: TrackerVit is NOT available in this OpenCV build!")
+            print("TrackerVit is NOT available in this OpenCV build")
+        try:
+            _ = cv2.TrackerCSRT_Params()
+            tracker_csrt_available = True
+            print("TrackerCSRT is available in this OpenCV build")
+        except AttributeError:
+            print("TrackerCSRT is NOT available in this OpenCV build")
+        if not tracker_vit_available and not tracker_csrt_available:
+            print("ERROR: Neither TrackerVit nor TrackerCSRT are available in this OpenCV build!")
             print("You may need opencv-contrib-python instead of opencv-python")
-            yield None, "TrackerVit not available in OpenCV"
+            yield None, "Neither TrackerVit nor TrackerCSRT are available in OpenCV"
             return
 
         # Get current frame image
