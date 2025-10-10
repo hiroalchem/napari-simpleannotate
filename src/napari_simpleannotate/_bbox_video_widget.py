@@ -1824,8 +1824,8 @@ class BboxVideoQWidget(QWidget):
                 # Following reference implementation exactly
                 try:
                     # Reference implementation uses the bbox directly as a list
-                    # coords[0] in reference is [x, y, width, height]
-                    print(f"Step 3: Calling tracker.init with bbox: {bbox}")
+                    # bbox is [x, y, width, height]
+                    print(f"Initializing tracker with bbox: {bbox}")
                     
                     # Initialize tracker
                     tracker.init(frame_data, bbox)
