@@ -331,7 +331,7 @@ class BboxQWidget(QWidget):
                         self.numbers.append(int(class_id))
                         classes.append(str(int(class_id)) + ": ")
                 shapes_layer = self.viewer.layers["bbox_layer"]
-                shapes_layer.data = shapes_data
+                shapes_layer.add_rectangles(shapes_data)
                 shapes_layer.features["class"] = classes
                 self.sort_classlist()
                 shapes_layer.refresh_text()
