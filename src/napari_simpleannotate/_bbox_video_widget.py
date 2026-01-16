@@ -32,6 +32,7 @@ import pathlib
 import shutil
 import sys
 import threading
+import time
 import traceback
 import urllib.request
 from collections import OrderedDict
@@ -326,8 +327,17 @@ class BboxVideoQWidget(QWidget):
         self.initVariables()
         self.initLayers()
 
-    def _download_vit_model(self, target_path: pathlib.Path) -> bool:
-        """Download the ViT tracker model to the requested path."""
+    def _download_vit_model(self, target_path: pathlib.Path, timeout: int = 30, max_retries: int = 3) -> bool:
+        """Download the ViT tracker model to the requested path.
+
+        Args:
+            target_path: Path where the model should be saved.
+            timeout: Timeout in seconds for the download request.
+            max_retries: Maximum number of retry attempts on failure.
+
+        Returns:
+            True if download succeeded, False otherwise.
+        """
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
         except Exception as dir_error:
@@ -336,20 +346,29 @@ class BboxVideoQWidget(QWidget):
 
         tmp_path = target_path.with_name(target_path.name + ".download")
 
-        try:
-            with urllib.request.urlopen(VITTRACK_MODEL_URL) as response, open(tmp_path, "wb") as dst:
-                shutil.copyfileobj(response, dst)
-            tmp_path.replace(target_path)
-            logger.info(f"Downloaded ViT model to {target_path}")
-            return True
-        except Exception as download_error:
-            logger.error(f"Failed to download ViT model: {download_error}")
+        for attempt in range(max_retries):
             try:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            except Exception as cleanup_error:
-                logger.debug(f"Failed to clean up temp file: {cleanup_error}")
-            return False
+                logger.info(f"Downloading ViT model (attempt {attempt + 1}/{max_retries})...")
+                with urllib.request.urlopen(VITTRACK_MODEL_URL, timeout=timeout) as response, open(
+                    tmp_path, "wb"
+                ) as dst:
+                    shutil.copyfileobj(response, dst)
+                tmp_path.replace(target_path)
+                logger.info(f"Downloaded ViT model to {target_path}")
+                return True
+            except Exception as download_error:
+                logger.warning(f"Download attempt {attempt + 1} failed: {download_error}")
+                try:
+                    if tmp_path.exists():
+                        tmp_path.unlink()
+                except Exception as cleanup_error:
+                    logger.debug(f"Failed to clean up temp file: {cleanup_error}")
+
+                if attempt < max_retries - 1:
+                    time.sleep(2)  # Wait before retry
+
+        logger.error(f"Failed to download ViT model after {max_retries} attempts")
+        return False
 
     def _user_cache_model_path(self) -> pathlib.Path:
         """Return a path under the user's cache directory for storing the model."""
@@ -629,6 +648,7 @@ class BboxVideoQWidget(QWidget):
         self.order = 0  # 桁数
         self.frame_cache = None  # Video frame cache
         self._tracking_worker = None
+        self._tracking_cancelled = False  # Flag for cancelling tracking loop
         self.trackers = {}  # Dictionary to store trackers for each bounding box
 
         # Pre-create TrackerVit params for reuse
@@ -1806,6 +1826,9 @@ class BboxVideoQWidget(QWidget):
         self.stop_tracking_button.setEnabled(True)
         self.tracking_status_label.setText("Tracking: Initializing...")
 
+        # Reset cancellation flag
+        self._tracking_cancelled = False
+
         # Create and start worker
         self._tracking_worker = create_worker(self._perform_tracking, bboxes_to_track)
         self._tracking_worker.started.connect(lambda: logger.info("Tracking started..."))
@@ -1942,6 +1965,11 @@ class BboxVideoQWidget(QWidget):
 
         # Track through subsequent frames
         for frame_idx in range(current_frame + 1, self.total_frames):
+            # Check for cancellation
+            if self._tracking_cancelled:
+                yield None, "Tracking cancelled by user"
+                return
+
             # Get frame data
             try:
                 frame_data = self.video_layer.data[frame_idx]
@@ -2091,6 +2119,8 @@ class BboxVideoQWidget(QWidget):
 
     def stop_tracking(self):
         """Stop the tracking process."""
+        # Set cancellation flag to stop the tracking loop
+        self._tracking_cancelled = True
         if self._tracking_worker is not None:
             self._tracking_worker.quit()
             self._tracking_worker = None
