@@ -358,9 +358,7 @@ class BboxVideoQWidget(QWidget):
             base_cache = pathlib.Path(cache_env).expanduser()
         else:
             if sys.platform == "win32":
-                base_cache = pathlib.Path(
-                    os.environ.get("LOCALAPPDATA", pathlib.Path.home() / "AppData" / "Local")
-                )
+                base_cache = pathlib.Path(os.environ.get("LOCALAPPDATA", pathlib.Path.home() / "AppData" / "Local"))
             elif sys.platform == "darwin":
                 base_cache = pathlib.Path.home() / "Library" / "Caches"
             else:
@@ -403,8 +401,7 @@ class BboxVideoQWidget(QWidget):
                 " Set NAPARI_SIMPLEANNOTATE_VIT_MODEL_PATH or download manually."
             )
             raise FileNotFoundError(
-                "ViT tracker model is unavailable. Provide it manually or via"
-                " NAPARI_SIMPLEANNOTATE_VIT_MODEL_PATH."
+                "ViT tracker model is unavailable. Provide it manually or via" " NAPARI_SIMPLEANNOTATE_VIT_MODEL_PATH."
             )
 
         return default_model_path
@@ -1571,15 +1568,14 @@ class BboxVideoQWidget(QWidget):
                     y1, y2 = min(y_coords), max(y_coords)
 
                     # Get class info
-                    class_info = shapes_layer.features["class"][i] if i < len(shapes_layer.features["class"]) else "0: Unknown"
+                    class_info = (
+                        shapes_layer.features["class"][i] if i < len(shapes_layer.features["class"]) else "0: Unknown"
+                    )
                     class_num = class_info.split(":")[0].strip()
 
-                    frame_bboxes[frame].append({
-                        "index": i,
-                        "x1": int(x1), "y1": int(y1),
-                        "x2": int(x2), "y2": int(y2),
-                        "class": class_num
-                    })
+                    frame_bboxes[frame].append(
+                        {"index": i, "x1": int(x1), "y1": int(y1), "x2": int(x2), "y2": int(y2), "class": class_num}
+                    )
 
             # Process each frame
             for frame_idx, bboxes in frame_bboxes.items():
@@ -1610,8 +1606,7 @@ class BboxVideoQWidget(QWidget):
                     rel_y2 = bbox["y2"] - crop_y1
 
                     # Skip if bbox crosses crop boundary
-                    if (rel_x1 < 0 or rel_y1 < 0 or
-                        rel_x2 > crop_width or rel_y2 > crop_height):
+                    if rel_x1 < 0 or rel_y1 < 0 or rel_x2 > crop_width or rel_y2 > crop_height:
                         logger.warning(f"Skipping bbox {bbox['index']} - crosses crop boundary")
                         continue
 
@@ -1623,10 +1618,10 @@ class BboxVideoQWidget(QWidget):
                         crop_y2 -= crop_y1
                         crop_y1 = 0
                     if crop_x2 > video_width:
-                        crop_x1 -= (crop_x2 - video_width)
+                        crop_x1 -= crop_x2 - video_width
                         crop_x2 = video_width
                     if crop_y2 > video_height:
-                        crop_y1 -= (crop_y2 - video_height)
+                        crop_y1 -= crop_y2 - video_height
                         crop_y2 = video_height
 
                     # Ensure crop is still valid size
@@ -1639,7 +1634,9 @@ class BboxVideoQWidget(QWidget):
 
                     # Save crop with video name prefix
                     video_name = os.path.splitext(os.path.basename(self.video_path))[0]
-                    crop_filename = f"{video_name}_frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
+                    crop_filename = (
+                        f"{video_name}_frame{str(frame_idx).zfill(self.order)}_class{bbox['class']}_bbox{bbox_idx}.png"
+                    )
                     crop_path = os.path.join(crops_dir, crop_filename)
                     io.imsave(crop_path, crop)
                     logger.info(f"Saved crop: {crop_filename}")
@@ -1658,8 +1655,12 @@ class BboxVideoQWidget(QWidget):
                             continue
 
                         # Check if other bbox is fully contained in crop
-                        if (other_bbox["x1"] >= crop_x1 and other_bbox["y1"] >= crop_y1 and
-                            other_bbox["x2"] <= crop_x2 and other_bbox["y2"] <= crop_y2):
+                        if (
+                            other_bbox["x1"] >= crop_x1
+                            and other_bbox["y1"] >= crop_y1
+                            and other_bbox["x2"] <= crop_x2
+                            and other_bbox["y2"] <= crop_y2
+                        ):
                             logger.debug(f"Bbox {other_bbox['index']} is contained in crop - marking as processed")
                             processed_bboxes.add(other_bbox["index"])
                             bboxes_in_this_crop.append(other_bbox["index"])
@@ -1675,15 +1676,21 @@ class BboxVideoQWidget(QWidget):
                                 continue
 
                             # Check if bbox is within crop (should always be true, but double-check)
-                            if (contained_bbox["x1"] >= crop_x1 and contained_bbox["y1"] >= crop_y1 and
-                                contained_bbox["x2"] <= crop_x2 and contained_bbox["y2"] <= crop_y2):
+                            if (
+                                contained_bbox["x1"] >= crop_x1
+                                and contained_bbox["y1"] >= crop_y1
+                                and contained_bbox["x2"] <= crop_x2
+                                and contained_bbox["y2"] <= crop_y2
+                            ):
                                 # Convert to YOLO format relative to crop
                                 rel_cx = ((contained_bbox["x1"] + contained_bbox["x2"]) / 2 - crop_x1) / crop_width
                                 rel_cy = ((contained_bbox["y1"] + contained_bbox["y2"]) / 2 - crop_y1) / crop_height
                                 rel_w = (contained_bbox["x2"] - contained_bbox["x1"]) / crop_width
                                 rel_h = (contained_bbox["y2"] - contained_bbox["y1"]) / crop_height
 
-                                f.write(f"{contained_bbox['class']} {rel_cx:.6f} {rel_cy:.6f} {rel_w:.6f} {rel_h:.6f}\n")
+                                f.write(
+                                    f"{contained_bbox['class']} {rel_cx:.6f} {rel_cy:.6f} {rel_w:.6f} {rel_h:.6f}\n"
+                                )
 
             logger.info(f"Saved {len(processed_bboxes)} cropped annotations")
 
@@ -1878,11 +1885,13 @@ class BboxVideoQWidget(QWidget):
             frame_data = (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
 
         # Make sure the array is C-contiguous for OpenCV
-        if not frame_data.flags['C_CONTIGUOUS']:
+        if not frame_data.flags["C_CONTIGUOUS"]:
             frame_data = np.ascontiguousarray(frame_data)
             logger.debug("Made frame data contiguous")
 
-        logger.debug(f"After conversion - shape: {frame_data.shape}, dtype: {frame_data.dtype}, min/max: {frame_data.min()}/{frame_data.max()}, contiguous: {frame_data.flags['C_CONTIGUOUS']}")
+        logger.debug(
+            f"After conversion - shape: {frame_data.shape}, dtype: {frame_data.dtype}, min/max: {frame_data.min()}/{frame_data.max()}, contiguous: {frame_data.flags['C_CONTIGUOUS']}"
+        )
 
         # Initialize trackers
         for bbox_info in bboxes_to_track:
@@ -1928,7 +1937,7 @@ class BboxVideoQWidget(QWidget):
                         "tracker": tracker,
                         "class": bbox_info["class"],
                         "last_bbox": bbox,
-                        "init_frame": current_frame  # Track which frame was used for init
+                        "init_frame": current_frame,  # Track which frame was used for init
                     }
                     logger.debug(f"Tracker stored for bbox {bbox_info['index']} with class {bbox_info['class']}")
 
@@ -1957,7 +1966,9 @@ class BboxVideoQWidget(QWidget):
 
                 # Ensure uint8 type
                 if frame_data.dtype != np.uint8:
-                    frame_data = (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
+                    frame_data = (
+                        (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
+                    )
 
             except Exception as e:
                 logger.error(f"Error reading frame {frame_idx}: {e}")
@@ -1977,8 +1988,8 @@ class BboxVideoQWidget(QWidget):
                     logger.debug(f"Last bbox: {tracker_info['last_bbox']}")
 
                     # Try to visualize what the tracker sees
-                    x, y, w, h = tracker_info['last_bbox']
-                    roi = frame_data[y:y+h, x:x+w]
+                    x, y, w, h = tracker_info["last_bbox"]
+                    roi = frame_data[y : y + h, x : x + w]
                     logger.debug(f"ROI shape: {roi.shape}, min/max: {roi.min()}/{roi.max()}")
 
                     # Reference implementation shows: ok, bbox = self.tracker.update(image)
@@ -2070,10 +2081,12 @@ class BboxVideoQWidget(QWidget):
 
             # Ensure features length matches number of shapes
             if len(current_classes) != shapes_layer.nshapes:
-                logger.warning(f"Feature length mismatch. Shapes: {shapes_layer.nshapes}, Classes: {len(current_classes)}")
+                logger.warning(
+                    f"Feature length mismatch. Shapes: {shapes_layer.nshapes}, Classes: {len(current_classes)}"
+                )
                 # Trim or pad to match
-                current_classes = current_classes[:shapes_layer.nshapes]
-                current_frames = current_frames[:shapes_layer.nshapes]
+                current_classes = current_classes[: shapes_layer.nshapes]
+                current_frames = current_frames[: shapes_layer.nshapes]
                 # Pad if necessary
                 while len(current_classes) < shapes_layer.nshapes:
                     current_classes.append("0: Unknown")
