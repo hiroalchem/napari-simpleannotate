@@ -1641,8 +1641,32 @@ class BboxVideoQWidget(QWidget):
                     rel_y2 = bbox["y2"] - crop_y1
 
                     if rel_x1 < 0 or rel_y1 < 0 or rel_x2 > crop_width or rel_y2 > crop_height:
-                        logger.warning(f"Skipping bbox {bbox['index']} - crosses crop boundary")
-                        continue
+                        # Attempt to shift crop so that bbox fits inside while staying in image bounds
+                        new_crop_x1 = max(0, min(bbox["x1"], video_width - crop_width))
+                        new_crop_y1 = max(0, min(bbox["y1"], video_height - crop_height))
+                        new_crop_x2 = new_crop_x1 + crop_width
+                        new_crop_y2 = new_crop_y1 + crop_height
+
+                        # Validate new crop bounds
+                        if (
+                            new_crop_x1 < 0
+                            or new_crop_y1 < 0
+                            or new_crop_x2 > video_width
+                            or new_crop_y2 > video_height
+                        ):
+                            logger.warning(f"Skipping bbox {bbox['index']} - cannot reposition crop in image")
+                            continue
+
+                        # Use the adjusted crop and recompute relative bbox coordinates
+                        crop_x1, crop_y1, crop_x2, crop_y2 = new_crop_x1, new_crop_y1, new_crop_x2, new_crop_y2
+                        rel_x1 = bbox["x1"] - crop_x1
+                        rel_y1 = bbox["y1"] - crop_y1
+                        rel_x2 = bbox["x2"] - crop_x1
+                        rel_y2 = bbox["y2"] - crop_y1
+
+                        if rel_x1 < 0 or rel_y1 < 0 or rel_x2 > crop_width or rel_y2 > crop_height:
+                            logger.warning(f"Skipping bbox {bbox['index']} - crosses crop boundary after adjustment")
+                            continue
 
                     # Extract crop
                     crop = frame_data[crop_y1:crop_y2, crop_x1:crop_x2]
