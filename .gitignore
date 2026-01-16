@@ -166,3 +166,6 @@ CLAUDE.md
 
 # Temporary utility scripts
 temp_utils/
+
+# Downloaded model files
+model/
