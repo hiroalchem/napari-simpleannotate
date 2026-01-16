@@ -1666,8 +1666,6 @@ class BboxVideoQWidget(QWidget):
                     for other_bbox in bboxes:
                         if other_bbox["index"] == bbox["index"]:  # Skip self
                             continue
-                        if other_bbox["index"] in processed_bboxes:  # Skip already processed as center
-                            continue
 
                         # Check if other bbox is fully contained in crop
                         if (
@@ -1676,9 +1674,10 @@ class BboxVideoQWidget(QWidget):
                             and other_bbox["x2"] <= crop_x2
                             and other_bbox["y2"] <= crop_y2
                         ):
-                            logger.debug(f"Bbox {other_bbox['index']} is contained in crop - marking as processed")
-                            processed_bboxes.add(other_bbox["index"])
+                            logger.debug(f"Bbox {other_bbox['index']} is contained in crop")
                             bboxes_in_this_crop.append(other_bbox["index"])
+                            # Mark as processed so it won't be used as crop center again
+                            processed_bboxes.add(other_bbox["index"])
 
                     # Also save the annotation in YOLO format for this crop
                     annotation_filename = crop_filename.replace(".png", ".txt")
@@ -1983,6 +1982,10 @@ class BboxVideoQWidget(QWidget):
                     frame_data = (
                         (frame_data * 255).astype(np.uint8) if frame_data.max() <= 1 else frame_data.astype(np.uint8)
                     )
+
+                # Ensure C-contiguous array for OpenCV tracker
+                if not frame_data.flags["C_CONTIGUOUS"]:
+                    frame_data = np.ascontiguousarray(frame_data)
 
             except Exception as e:
                 logger.error(f"Error reading frame {frame_idx}: {e}")
