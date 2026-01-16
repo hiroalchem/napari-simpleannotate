@@ -6,7 +6,7 @@ Thank you for your interest in contributing to napari-simpleannotate!
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/napari-simpleannotate.git
+git clone https://github.com/hiroalchem/napari-simpleannotate.git
 cd napari-simpleannotate
 ```
 
