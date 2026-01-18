@@ -34,8 +34,9 @@ dependencies = [
     "napari_video",
     "zarr",
     "numcodecs",
+    "opencv-contrib-python",
 ]
-version = "0.1.3"
+version = "0.1.4"
 
 [project.optional-dependencies]
 testing = [
@@ -97,6 +98,7 @@ ignore = [
     "E722", # temporarily ignore bare except for now
     "F841", # temporarily ignore unused variables for now
     "SIM102", "SIM105", "SIM108", # temporarily ignore simplify rules for now
+    "G004", # allow f-string in logging
 ]
 
 [tool.ruff]

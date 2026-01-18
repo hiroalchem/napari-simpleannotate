@@ -82,27 +82,29 @@ After installing napari-simpleannotate, launch napari and navigate to `Plugins >
 **Prerequisites**: Install PyAV for video support: `pip install av`
 
 1. **Opening Videos**:
-   - Click `Open Video` to select video files
-   - Supported formats: MP4, AVI, MOV, MKV, WMV, FLV, WebM
-   - Video loads with frame-by-frame navigation
+   - Click `Open Video` to select MP4, AVI, MOV, MKV, WMV, FLV, or WebM files
+   - Frames load through a cached reader that keeps recently viewed frames ready for scrubbing
 
-2. **Navigation**:
-   - Use napari's time slider to navigate frames
-   - Frame counter shows current position: "Frame: X/Y"
-   - **Keyboard shortcuts**: Q (previous annotation), W (next annotation)
-   - Click navigation buttons to jump to nearest annotations
-   - Video performance optimized with LRU cache and parallel prefetching
+2. **Navigation & Frame Tools**:
+   - Use napari's time slider; the widget shows `Frame: current/total` alongside live cache usage
+   - Jump between annotated frames with the `Prev (Q)` and `Next (W)` buttons or keyboard shortcuts
+   - Nearby frames are prefetched in the background to keep playback smooth during review
 
-3. **Frame-Aware Annotation**:
-   - Navigate to target frame before annotating
-   - Create bounding boxes with napari's rectangle tool
-   - Each annotation automatically records the current frame number
-   - Annotations only visible on their respective frames
+3. **Annotating Frames**:
+   - Draw rectangles after selecting a class; each shape stores its frame index automatically
+   - Bounding boxes are only visible on the frame where they were created
+   - Class management matches the image workflow, and `class.yaml` is written in YOLO `names:` format
 
-4. **Class and Export**:
-   - Class management identical to image annotation
-   - Extended YOLO format: `class_id frame x_center y_center width height`
-   - Saves to `video_name.txt` + `class.yaml` in video directory
+4. **Automatic Tracking**:
+   - Use `Start` to launch trackers for the boxes in the current frame and `Stop` to halt processing
+   - Keep `Track all bounding boxes` enabled to follow every box, or disable it to track only selected shapes
+   - Choose between the default OpenCV `CSRT` tracker and the experimental `TrackerVit`
+
+5. **Saving & Exports**:
+   - `Save Annotations` writes per-frame YOLO files (`imgNNN.txt`) in a video-specific folder next to the source
+   - Annotated frames are saved once as `imgNNN.png` so you can review what was labeled later
+   - Enable `Enable crop on save` to export fixed-size crops plus matching YOLO labels under `crops/`
+   - Existing exports are reused when present so repeated saves only write new annotations
 
 ### Image Classification Labeling
 
@@ -139,7 +141,7 @@ After installing napari-simpleannotate, launch napari and navigate to `Plugins >
 | Widget | Annotation File | Class File | Format |
 |--------|----------------|------------|---------|
 | Bbox (Images) | `image.txt` | `class.yaml` | YOLO standard |
-| Bbox (Video) | `video.txt` | `class.yaml` | Extended YOLO with frame |
+| Bbox (Video) | `imgNNN.txt` per frame (+ optional `crops/*.txt`) | `class.yaml` | YOLO normalized (per frame/crop) |
 | Classification | `labels.csv` | `class.txt` | CSV with image-label pairs |
 
 
