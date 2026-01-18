@@ -2117,11 +2117,12 @@ class BboxVideoQWidget(QWidget):
 
         # Add all rectangles at once
         if rectangles_to_add:
-            shapes_layer.add_rectangles(rectangles_to_add)
-
-            # Update features after adding all shapes
+            # Get current features BEFORE adding rectangles
+            # (add_rectangles may auto-extend features, causing double-counting)
             current_classes = list(shapes_layer.features.get("class", []))
             current_frames = list(shapes_layer.features.get("frame", []))
+
+            shapes_layer.add_rectangles(rectangles_to_add)
 
             current_classes.extend(classes_to_add)
             current_frames.extend(frames_to_add)
