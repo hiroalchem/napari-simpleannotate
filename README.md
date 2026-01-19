@@ -26,6 +26,7 @@ https://napari.org/stable/plugins/index.html
 -->
 
 ![overview](https://github.com/hiroalchem/napari-simpleannotate/raw/main/images/dog_and_cat.jpg)
+![tracking demo](images/tracking_pigion_480w.gif)
 
 
 ## Installation
