@@ -26,7 +26,6 @@ https://napari.org/stable/plugins/index.html
 -->
 
 ![overview](https://github.com/hiroalchem/napari-simpleannotate/raw/main/images/dog_and_cat.jpg)
-![tracking demo](images/tracking_pigion_480w.gif)
 
 
 ## Installation
@@ -100,6 +99,8 @@ After installing napari-simpleannotate, launch napari and navigate to `Plugins >
    - Use `Start` to launch trackers for the boxes in the current frame and `Stop` to halt processing
    - Keep `Track all bounding boxes` enabled to follow every box, or disable it to track only selected shapes
    - Choose between the default OpenCV `CSRT` tracker and the experimental `TrackerVit`
+
+   ![tracking demo](https://github.com/hiroalchem/napari-simpleannotate/raw/main/images/tracking_pigion_480w.gif)
 
 5. **Saving & Exports**:
    - `Save Annotations` writes per-frame YOLO files (`imgNNN.txt`) in a video-specific folder next to the source
