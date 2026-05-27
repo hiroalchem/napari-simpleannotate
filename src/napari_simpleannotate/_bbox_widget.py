@@ -18,6 +18,8 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from qtpy.QtGui import QBrush, QColorConstants
+
 
 from ._utils import find_missing_number, save_text, xywh2xyxy
 
@@ -29,6 +31,7 @@ class BboxQWidget(QWidget):
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
+        self.class_counts = {}
         self.initUI()
         self.initVariables()
         self.initLayers()
@@ -54,9 +57,15 @@ class BboxQWidget(QWidget):
         self.keep_contrast_checkbox = QCheckBox("Keep Contrast", self)
 
         # Create a list widget for displaying the list of classes
+        classListLayout = QHBoxLayout()
         self.classlistWidget = QListWidget()
         self.classlistWidget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.classlistWidget.itemClicked.connect(self.class_clicked)
+        self.countListWidget = QListWidget()
+        self.countListWidget.setEnabled(False)
+        self.countListWidget.setMaximumWidth(40)
+        classListLayout.addWidget(self.classlistWidget)
+        classListLayout.addWidget(self.countListWidget)
 
         # Create text box for entering the class names
         self.class_textbox = QLineEdit()
@@ -83,7 +92,7 @@ class BboxQWidget(QWidget):
         layout.addWidget(self.listWidget)
         layout.addWidget(self.clear_button)
         layout.addWidget(self.keep_contrast_checkbox)
-        layout.addWidget(self.classlistWidget)
+        layout.addLayout(classListLayout)
         layout.addWidget(self.class_textbox)
         layout.addWidget(self.add_class_button)
         layout.addWidget(self.del_class_button)
@@ -145,6 +154,7 @@ class BboxQWidget(QWidget):
                     self.popup("numbering")
             class_name = f"{self.current_class_number}: {class_name}"
             self.classlistWidget.addItem(class_name)
+            self.countListWidget.addItem("0")
             self.sort_classlist()
             self.class_textbox.clear()
 
@@ -234,6 +244,7 @@ class BboxQWidget(QWidget):
             item = self.listWidget.findItems(fname[0], Qt.MatchExactly)[0]
             self.listWidget.setCurrentItem(item)
             self.open_image(item)
+        self.update_list_colors_and_class_count()
 
     def openDirectory(self):
         dname = QFileDialog.getExistingDirectory(self, "Open directory", "/")
@@ -242,6 +253,7 @@ class BboxQWidget(QWidget):
             image_files = sorted([f for f in files if f.endswith((".png", ".jpg", ".jpeg", ".tif", ".tiff"))])
             for image_file in image_files:
                 self.listWidget.addItem(os.path.join(dname, image_file))
+        self.update_list_colors_and_class_count()
 
     def popup_load_class(self, class_data_from_yaml):
         popup = QMessageBox(self)
@@ -400,6 +412,7 @@ class BboxQWidget(QWidget):
             prev_items_dict = yaml.safe_load(file)
         if prev_items_dict != class_data:
             self.check_file(class_file, class_data, file_type="classlist")
+        self.update_list_colors_and_class_count()
 
     def check_file(self, filepath, file_str, file_type="annotations"):
         popup = QMessageBox(self)
@@ -439,3 +452,29 @@ class BboxQWidget(QWidget):
         popup.setText(f"{file_type} saved")
         popup.setStandardButtons(QMessageBox.Close)
         popup.exec_()
+
+    def update_list_colors_and_class_count(self):
+        self.class_counts = {}
+        for row in range(self.listWidget.count()):
+            item = self.listWidget.item(row)
+            path = item.text()
+            annotationsPath = os.path.splitext(path)[0] + ".txt"
+            if not os.path.exists(annotationsPath):
+                continue
+            with open(annotationsPath, 'r') as file:
+                lines = file.readlines()
+            if len(lines) == 0:
+                continue
+            for line in lines:
+                class_id = int(line.split()[0])
+                if not class_id in self.class_counts.keys():
+                    self.class_counts[class_id] = 0
+                self.class_counts[class_id] = self.class_counts[class_id] + 1
+            item.setForeground(QBrush(QColorConstants.Green))
+        self.countListWidget.clear()
+        counts = ['0'] * len(self.class_counts)
+        print("counts:", counts)
+        self.countListWidget.addItems(counts)
+        for key, value in self.class_counts.items():
+            self.countListWidget.item(key).setText(str(value))
+
