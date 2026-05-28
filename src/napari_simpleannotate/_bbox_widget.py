@@ -2,6 +2,7 @@ import os
 from functools import partial
 from typing import TYPE_CHECKING
 
+import napari
 import numpy as np
 import skimage.io
 import yaml
@@ -20,7 +21,6 @@ from qtpy.QtWidgets import (
 )
 from qtpy.QtGui import QBrush, QColorConstants
 
-
 from ._utils import find_missing_number, save_text, xywh2xyxy
 
 if TYPE_CHECKING:
@@ -32,6 +32,7 @@ class BboxQWidget(QWidget):
         super().__init__()
         self.viewer = napari_viewer
         self.class_counts = {}
+        self.dirty = False
         self.initUI()
         self.initVariables()
         self.initLayers()
@@ -117,7 +118,14 @@ class BboxQWidget(QWidget):
         """Initializes the image and shapes layers in the napari viewer."""
         self.viewer.add_image(np.zeros((10, 10)), name="image_layer")
         self.viewer.add_shapes(name="bbox_layer", features=self.features, text=self.text)
+        self.viewer.layers["bbox_layer"].events.data.connect(self.annotationsChanged)
         # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
+
+    def annotationsChanged(self):
+        self.dirty = True
+        item = self.listWidget.currentItem()
+        if item.isSelected() and self.dirty:
+            item.setForeground(QBrush(QColorConstants.Red))
 
     def class_clicked(self):
         shapes_layer = self.viewer.layers["bbox_layer"]
@@ -272,12 +280,26 @@ class BboxQWidget(QWidget):
                 self.classlistWidget.addItem(f"{class_id}: {class_name}")
             self.sort_classlist()
 
+    def showSaveChangesDialog(self):
+        popup = QMessageBox(self)
+        popup.setWindowTitle("Save Changes?")
+        popup.setText("Do you want to save the changes?")
+        popup.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+        return popup.exec_()
+
     def open_image(self, current_item, previous_item=None):
+        layer_names = [layer.name for layer in self.viewer.layers]
+        if "bbox_layer" in layer_names:
+            if self.dirty:
+                response = self.showSaveChangesDialog()
+                if response == QMessageBox.Yes:
+                    self.saveAnnotationsFor(previous_item.text())
+                else:
+                    self.dirty = False
         self.previous_contrast_limits = self.viewer.layers["image_layer"].contrast_limits
         """Opens an image and updates the image layer in the napari viewer."""
         if current_item is None:
             return  # If there is no current item selected, exit
-
         image_file = current_item.text()
         image = skimage.io.imread(image_file)
         rgb = image.shape[-1] in (3, 4)
@@ -296,6 +318,10 @@ class BboxQWidget(QWidget):
         classes = []
 
         class_file = os.path.dirname(image_file) + "/class.yaml"
+        current_class = "none"
+        if self.classlistWidget.currentItem():
+            current_class = self.classlistWidget.currentItem().text()
+        print("current_class: ", current_class)
         if os.path.isfile(class_file):
             with open(class_file) as file:
                 class_data_from_yaml = yaml.safe_load(file)
@@ -316,6 +342,10 @@ class BboxQWidget(QWidget):
             self.sort_classlist()
         items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
         self.numbers = [int(name.split(":")[0]) for name in items_text]
+        for row in range(self.classlistWidget.count()):
+            item = self.classlistWidget.item(row)
+            if item.text() == current_class:
+                self.classlistWidget.setCurrentItem(item)
 
         items_dict_with_no = {
             item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text
@@ -353,16 +383,16 @@ class BboxQWidget(QWidget):
         else:
             shapes_layer = self.viewer.layers["bbox_layer"]
             shapes_layer.data = []
-
         self.viewer.reset_view()
+        self.dirty = False
 
     def saveAnnotations(self):
-        """Saves the bounding box annotations in the shapes layer in YOLO format."""
-
-        # Get the current image file name and the corresponding annotation file name
         current_image_file = self.listWidget.currentItem().text()
-        annotation_file = os.path.splitext(current_image_file)[0] + ".txt"
+        self.saveAnnotationsFor(current_image_file)
 
+    def saveAnnotationsFor(self, image_file):
+        """Saves the bounding box annotations in the shapes layer in YOLO format."""
+        annotation_file = os.path.splitext(image_file)[0] + ".txt"
         shapes_layer = self.viewer.layers["bbox_layer"]
         image_layer = self.viewer.layers["image_layer"]
         if image_layer.rgb:
@@ -412,6 +442,7 @@ class BboxQWidget(QWidget):
             prev_items_dict = yaml.safe_load(file)
         if prev_items_dict != class_data:
             self.check_file(class_file, class_data, file_type="classlist")
+        self.dirty = False
         self.update_list_colors_and_class_count()
 
     def check_file(self, filepath, file_str, file_type="annotations"):
@@ -426,7 +457,7 @@ class BboxQWidget(QWidget):
         if os.path.isfile(filepath):
             with open(filepath) as f:
                 if f.read() == file_str:
-                    self.show_saved_popup(popup, filepath, file_str, file_type)
+                    self.show_saved_notification(popup, filepath, file_str, file_type)
                 else:
                     if file_type == "annotations":
                         popup.setText("Do you want to overwrite the existing annotations?")
@@ -441,17 +472,15 @@ class BboxQWidget(QWidget):
                     )
                     popup.exec_()
         else:
-            self.show_saved_popup(popup, filepath, file_str, file_type)
+            self.show_saved_notification(popup, filepath, file_str, file_type)
 
     def on_popup_button_clicked_save(self, filepath, file_str, file_type, clicked_button):
         if clicked_button.text() == "Overwrite":
             save_text(filepath, file_str, file_type)
 
-    def show_saved_popup(self, popup, filepath, file_str, file_type):
+    def show_saved_notification(self, popup, filepath, file_str, file_type):
         save_text(filepath, file_str, file_type)
-        popup.setText(f"{file_type} saved")
-        popup.setStandardButtons(QMessageBox.Close)
-        popup.exec_()
+        napari.utils.notifications.show_info(f"{file_type} saved")
 
     def update_list_colors_and_class_count(self):
         self.class_counts = {}
@@ -471,9 +500,10 @@ class BboxQWidget(QWidget):
                     self.class_counts[class_id] = 0
                 self.class_counts[class_id] = self.class_counts[class_id] + 1
             item.setForeground(QBrush(QColorConstants.Green))
+            if item.isSelected() and self.dirty:
+                item.setForeground(QBrush(QColorConstants.Red))
         self.countListWidget.clear()
         counts = ['0'] * len(self.class_counts)
-        print("counts:", counts)
         self.countListWidget.addItems(counts)
         for key, value in self.class_counts.items():
             self.countListWidget.item(key).setText(str(value))
