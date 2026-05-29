@@ -113,12 +113,16 @@ class BboxQWidget(QWidget):
         self.numbers = []
         self.current_class_number = 0
         self.previous_contrast_limits = None
+        self.displaySettings = None
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
         self.viewer.add_image(np.zeros((10, 10)), name="image_layer")
         self.viewer.add_shapes(name="bbox_layer", features=self.features, text=self.text)
         self.viewer.layers["bbox_layer"].events.data.connect(self.annotationsChanged)
+        self.viewer.layers["bbox_layer"].events.current_edge_color.connect(self.bounding_box_display_changed)
+        self.viewer.layers["bbox_layer"].events.current_face_color.connect(self.bounding_box_display_changed)
+        self.viewer.layers["bbox_layer"].events.edge_width.connect(self.bounding_box_display_changed)
         # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
 
     def annotationsChanged(self):
@@ -126,6 +130,18 @@ class BboxQWidget(QWidget):
         item = self.listWidget.currentItem()
         if item.isSelected() and self.dirty:
             item.setForeground(QBrush(QColorConstants.Red))
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        if self.classlistWidget.currentItem():
+            shapes_layer.feature_defaults["class"] = self.classlistWidget.currentItem().text()
+
+
+    def bounding_box_display_changed(self, new):
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        self.displaySettings = {"edge_color": shapes_layer.current_edge_color,
+                           "face_color": shapes_layer.current_face_color,
+                           "edge_width": shapes_layer.current_edge_width}
+
+
 
     def class_clicked(self):
         shapes_layer = self.viewer.layers["bbox_layer"]
@@ -214,7 +230,9 @@ class BboxQWidget(QWidget):
             return
         else:
             selected_item = self.classlistWidget.selectedItems()[0]
+            selected_index = self.classlistWidget.selectedIndexes()[0]
             self.classlistWidget.takeItem(self.classlistWidget.row(selected_item))
+            self.countListWidget.takeItem(selected_index.row())
             if button.text() == "&Yes":
                 self.sort_classlist(renumber=True)
             else:
@@ -276,9 +294,13 @@ class BboxQWidget(QWidget):
             return
         else:
             self.classlistWidget.clear()
+            self.countListWidget.clear()
             for class_id, class_name in class_data_from_yaml["names"].items():
                 self.classlistWidget.addItem(f"{class_id}: {class_name}")
+                self.countListWidget.addItem(f"0")
             self.sort_classlist()
+        self.update_list_colors_and_class_count()
+
 
     def showSaveChangesDialog(self):
         popup = QMessageBox(self)
@@ -342,11 +364,6 @@ class BboxQWidget(QWidget):
             self.sort_classlist()
         items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
         self.numbers = [int(name.split(":")[0]) for name in items_text]
-        for row in range(self.classlistWidget.count()):
-            item = self.classlistWidget.item(row)
-            if item.text() == current_class:
-                self.classlistWidget.setCurrentItem(item)
-
         items_dict_with_no = {
             item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text
         }
@@ -383,8 +400,14 @@ class BboxQWidget(QWidget):
         else:
             shapes_layer = self.viewer.layers["bbox_layer"]
             shapes_layer.data = []
+            shapes_layer.features = shapes_layer.features.iloc[:0]
+        for row in range(self.classlistWidget.count()):
+            item = self.classlistWidget.item(row)
+            if item.text() == current_class:
+                self.classlistWidget.setCurrentItem(item)
         self.viewer.reset_view()
         self.dirty = False
+        self.update_list_colors_and_class_count()
 
     def saveAnnotations(self):
         current_image_file = self.listWidget.currentItem().text()
@@ -486,6 +509,7 @@ class BboxQWidget(QWidget):
         self.class_counts = {}
         for row in range(self.listWidget.count()):
             item = self.listWidget.item(row)
+            item.setForeground(QBrush(QColorConstants.White))
             path = item.text()
             annotationsPath = os.path.splitext(path)[0] + ".txt"
             if not os.path.exists(annotationsPath):
