@@ -544,7 +544,7 @@ class BboxQWidget(QWidget):
                 continue
             for line in lines:
                 class_id = int(line.split()[0])
-                if not class_id in self.class_counts.keys():
+                if not class_id in self.class_counts:
                     self.class_counts[class_id] = 0
                 self.class_counts[class_id] = self.class_counts[class_id] + 1
             item.setForeground(QBrush(QColorConstants.Green))
