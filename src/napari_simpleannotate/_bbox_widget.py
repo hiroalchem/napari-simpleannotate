@@ -6,6 +6,7 @@ import napari
 import numpy as np
 import skimage.io
 import yaml
+import appdirs
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -113,7 +114,10 @@ class BboxQWidget(QWidget):
         self.numbers = []
         self.current_class_number = 0
         self.previous_contrast_limits = None
-        self.displaySettings = None
+        self.display_settings = None
+        self.data_folder = appdirs.user_data_dir("simple_annotate")
+        os.makedirs(self.data_folder, exist_ok=True)
+        self.options_path = os.path.join(self.data_folder, "display_options.yaml")
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
@@ -123,6 +127,8 @@ class BboxQWidget(QWidget):
         self.viewer.layers["bbox_layer"].events.current_edge_color.connect(self.bounding_box_display_changed)
         self.viewer.layers["bbox_layer"].events.current_face_color.connect(self.bounding_box_display_changed)
         self.viewer.layers["bbox_layer"].events.edge_width.connect(self.bounding_box_display_changed)
+        self.read_display_settings()
+        self.apply_display_settings()
         # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
 
     def annotationsChanged(self):
@@ -135,13 +141,31 @@ class BboxQWidget(QWidget):
             shapes_layer.feature_defaults["class"] = self.classlistWidget.currentItem().text()
 
 
-    def bounding_box_display_changed(self, new):
+    def bounding_box_display_changed(self, event):
         shapes_layer = self.viewer.layers["bbox_layer"]
-        self.displaySettings = {"edge_color": shapes_layer.current_edge_color,
-                           "face_color": shapes_layer.current_face_color,
-                           "edge_width": shapes_layer.current_edge_width}
+        self.display_settings = {"edge_color": str(shapes_layer.current_edge_color),
+                           "face_color": str(shapes_layer.current_face_color),
+                           "edge_width": int(shapes_layer.current_edge_width)}
+        with open(self.options_path, 'w') as file:
+            yaml.dump(self.display_settings, file)
 
 
+    def read_display_settings(self):
+        if not os.path.exists(self.options_path):
+            return
+        with open(self.options_path, 'r') as file:
+            self.display_settings = yaml.safe_load(file)
+
+
+    def apply_display_settings(self):
+        if not self.display_settings:
+            return
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        if not shapes_layer:
+            return
+        shapes_layer.current_edge_width = self.display_settings["edge_width"]
+        shapes_layer.current_face_color = self.display_settings["face_color"]
+        shapes_layer.current_edge_color = self.display_settings["edge_color"]
 
     def class_clicked(self):
         shapes_layer = self.viewer.layers["bbox_layer"]
