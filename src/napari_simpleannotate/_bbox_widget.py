@@ -124,11 +124,11 @@ class BboxQWidget(QWidget):
         self.viewer.add_image(np.zeros((10, 10)), name="image_layer")
         self.viewer.add_shapes(name="bbox_layer", features=self.features, text=self.text)
         self.viewer.layers["bbox_layer"].events.data.connect(self.annotationsChanged)
+        self.read_display_settings()
+        self.apply_display_settings()
         self.viewer.layers["bbox_layer"].events.current_edge_color.connect(self.bounding_box_display_changed)
         self.viewer.layers["bbox_layer"].events.current_face_color.connect(self.bounding_box_display_changed)
         self.viewer.layers["bbox_layer"].events.edge_width.connect(self.bounding_box_display_changed)
-        self.read_display_settings()
-        self.apply_display_settings()
         # self.viewer.layers["bbox_layer"].mouse_drag_callbacks.append(self.add_size)
 
     def annotationsChanged(self):
@@ -140,22 +140,21 @@ class BboxQWidget(QWidget):
         if self.classlistWidget.currentItem():
             shapes_layer.feature_defaults["class"] = self.classlistWidget.currentItem().text()
 
-
     def bounding_box_display_changed(self, event):
         shapes_layer = self.viewer.layers["bbox_layer"]
-        self.display_settings = {"edge_color": str(shapes_layer.current_edge_color),
-                           "face_color": str(shapes_layer.current_face_color),
-                           "edge_width": int(shapes_layer.current_edge_width)}
-        with open(self.options_path, 'w') as file:
+        self.display_settings = {
+            "edge_color": str(shapes_layer.current_edge_color),
+            "face_color": str(shapes_layer.current_face_color),
+            "edge_width": int(shapes_layer.current_edge_width),
+        }
+        with open(self.options_path, "w") as file:
             yaml.dump(self.display_settings, file)
-
 
     def read_display_settings(self):
         if not os.path.exists(self.options_path):
             return
-        with open(self.options_path, 'r') as file:
+        with open(self.options_path, "r") as file:
             self.display_settings = yaml.safe_load(file)
-
 
     def apply_display_settings(self):
         if not self.display_settings:
@@ -324,7 +323,6 @@ class BboxQWidget(QWidget):
                 self.countListWidget.addItem(f"0")
             self.sort_classlist()
         self.update_list_colors_and_class_count()
-
 
     def showSaveChangesDialog(self):
         popup = QMessageBox(self)
@@ -538,7 +536,7 @@ class BboxQWidget(QWidget):
             annotationsPath = os.path.splitext(path)[0] + ".txt"
             if not os.path.exists(annotationsPath):
                 continue
-            with open(annotationsPath, 'r') as file:
+            with open(annotationsPath, "r") as file:
                 lines = file.readlines()
             if len(lines) == 0:
                 continue
@@ -551,8 +549,7 @@ class BboxQWidget(QWidget):
             if item.isSelected() and self.dirty:
                 item.setForeground(QBrush(QColorConstants.Red))
         self.countListWidget.clear()
-        counts = ['0'] * len(self.class_counts)
+        counts = ["0"] * len(self.class_counts)
         self.countListWidget.addItems(counts)
         for key, value in self.class_counts.items():
             self.countListWidget.item(key).setText(str(value))
-
