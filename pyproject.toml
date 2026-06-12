@@ -35,7 +35,7 @@ dependencies = [
     "zarr",
     "numcodecs",
     "opencv-contrib-python",
-    "appdirs",
+    "platformdirs",
 ]
 version = "0.1.5"
 
