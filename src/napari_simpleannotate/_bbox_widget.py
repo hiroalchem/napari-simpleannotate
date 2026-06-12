@@ -6,7 +6,8 @@ import napari
 import numpy as np
 import skimage.io
 import yaml
-import appdirs
+import platformdirs
+from PyQt5.QtCore import QItemSelectionModel
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -50,7 +51,6 @@ class BboxQWidget(QWidget):
         # Create a list widget for displaying the list of opened files
         self.listWidget = QListWidget()
         self.listWidget.currentItemChanged.connect(self.open_image)
-
         # Create button for clear the list of opened files
         self.clear_button = QPushButton("Clear list of opened files", self)
         self.clear_button.clicked.connect(self.listWidget.clear)
@@ -111,11 +111,12 @@ class BboxQWidget(QWidget):
             "size": 10,
             "color": "green",
         }
+        self.blockFileChanged = False
         self.numbers = []
         self.current_class_number = 0
         self.previous_contrast_limits = None
         self.display_settings = None
-        self.data_folder = appdirs.user_data_dir("simple_annotate")
+        self.data_folder = platformdirs.user_data_dir("simple_annotate")
         os.makedirs(self.data_folder, exist_ok=True)
         self.options_path = os.path.join(self.data_folder, "display_options.yaml")
 
@@ -134,7 +135,7 @@ class BboxQWidget(QWidget):
     def annotationsChanged(self):
         self.dirty = True
         item = self.listWidget.currentItem()
-        if item.isSelected() and self.dirty:
+        if item and item.isSelected() and self.dirty:
             item.setForeground(QBrush(QColorConstants.Red))
         shapes_layer = self.viewer.layers["bbox_layer"]
         if self.classlistWidget.currentItem():
@@ -328,7 +329,7 @@ class BboxQWidget(QWidget):
         popup = QMessageBox(self)
         popup.setWindowTitle("Save Changes?")
         popup.setText("Do you want to save the changes?")
-        popup.setStandardButtons(QMessageBox.Yes | QMessageBox.Cancel)
+        popup.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         return popup.exec_()
 
     def open_image(self, current_item, previous_item=None):
@@ -338,7 +339,7 @@ class BboxQWidget(QWidget):
                 response = self.showSaveChangesDialog()
                 if response == QMessageBox.Yes:
                     self.saveAnnotationsFor(previous_item.text())
-                else:
+                elif response == QMessageBox.No:
                     self.dirty = False
         self.previous_contrast_limits = self.viewer.layers["image_layer"].contrast_limits
         """Opens an image and updates the image layer in the napari viewer."""
@@ -529,6 +530,7 @@ class BboxQWidget(QWidget):
 
     def update_list_colors_and_class_count(self):
         self.class_counts = {}
+        classes = {}
         for row in range(self.listWidget.count()):
             item = self.listWidget.item(row)
             item.setForeground(QBrush(QColorConstants.White))
@@ -536,6 +538,9 @@ class BboxQWidget(QWidget):
             annotationsPath = os.path.splitext(path)[0] + ".txt"
             if not os.path.exists(annotationsPath):
                 continue
+            classesPath = os.path.join(os.path.dirname(annotationsPath), "class.yaml")
+            if os.path.exists(classesPath):
+                classes = yaml.safe_load(open(classesPath))["names"]
             with open(annotationsPath, "r") as file:
                 lines = file.readlines()
             if len(lines) == 0:
@@ -549,7 +554,7 @@ class BboxQWidget(QWidget):
             if item.isSelected() and self.dirty:
                 item.setForeground(QBrush(QColorConstants.Red))
         self.countListWidget.clear()
-        counts = ["0"] * len(self.class_counts)
+        counts = ["0"] * len(classes)
         self.countListWidget.addItems(counts)
         for key, value in self.class_counts.items():
             self.countListWidget.item(key).setText(str(value))
