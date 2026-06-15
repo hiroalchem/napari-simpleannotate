@@ -529,18 +529,19 @@ class BboxQWidget(QWidget):
 
     def update_list_colors_and_class_count(self):
         self.class_counts = {}
-        classes = {}
+        parent = ""
+        if self.listWidget.currentItem():
+            parent = os.path.dirname(self.listWidget.currentItem().text())
         for row in range(self.listWidget.count()):
             item = self.listWidget.item(row)
             item.setForeground(QBrush(QColorConstants.White))
             path = item.text()
+            itemParent = os.path.dirname(path)
+            if itemParent != parent:
+                continue
             annotationsPath = os.path.splitext(path)[0] + ".txt"
             if not os.path.exists(annotationsPath):
                 continue
-            classesPath = os.path.join(os.path.dirname(annotationsPath), "class.yaml")
-            if os.path.exists(classesPath):
-                with open(classesPath, "r") as file:
-                    classes = yaml.safe_load(file)["names"]
             with open(annotationsPath, "r") as file:
                 lines = file.readlines()
             if len(lines) == 0:
@@ -554,7 +555,12 @@ class BboxQWidget(QWidget):
             if item.isSelected() and self.dirty:
                 item.setForeground(QBrush(QColorConstants.Red))
         self.countListWidget.clear()
-        counts = ["0"] * len(classes)
+        if not self.classlistWidget.count() > 0:
+            return
+        counts = ["0"] * self.classlistWidget.count()
         self.countListWidget.addItems(counts)
+        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_id_list = [int(item_text.split(":")[0].strip()) for item_text in items_text]
         for key, value in self.class_counts.items():
-            self.countListWidget.item(key).setText(str(value))
+            index = items_id_list.index(key)
+            self.countListWidget.item(index).setText(str(value))
