@@ -7,7 +7,6 @@ import numpy as np
 import skimage.io
 import yaml
 import platformdirs
-from PyQt5.QtCore import QItemSelectionModel
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -540,7 +539,8 @@ class BboxQWidget(QWidget):
                 continue
             classesPath = os.path.join(os.path.dirname(annotationsPath), "class.yaml")
             if os.path.exists(classesPath):
-                classes = yaml.safe_load(open(classesPath))["names"]
+                with open(classesPath, "r") as file:
+                    classes = yaml.safe_load(file)["names"]
             with open(annotationsPath, "r") as file:
                 lines = file.readlines()
             if len(lines) == 0:
