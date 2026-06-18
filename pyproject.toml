@@ -37,7 +37,7 @@ dependencies = [
     "opencv-contrib-python",
     "platformdirs",
 ]
-version = "0.1.5"
+version = "0.1.6"
 
 [project.optional-dependencies]
 testing = [
