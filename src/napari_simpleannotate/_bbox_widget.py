@@ -7,7 +7,7 @@ import numpy as np
 import skimage.io
 import yaml
 import platformdirs
-from qtpy.QtCore import Qt
+from qtpy.QtCore import Qt, QObject
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -19,6 +19,7 @@ from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
+    QListWidgetItem,
 )
 from qtpy.QtGui import QBrush, QColorConstants
 
@@ -59,13 +60,20 @@ class BboxQWidget(QWidget):
 
         # Create a list widget for displaying the list of classes
         classListLayout = QHBoxLayout()
-        self.classlistWidget = QListWidget()
-        self.classlistWidget.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.classlistWidget.itemClicked.connect(self.class_clicked)
+        self.classListWidget = QListWidget()
+        self.classListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.classListWidget.itemClicked.connect(self.class_clicked)
+
+        self.colorListWidget = QListWidget()
+        self.colorListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
+        # self.colorListWidget.itemClicked.connect(self.color_clicked)
+        self.colorListWidget.setMaximumWidth(15)
+
         self.countListWidget = QListWidget()
         self.countListWidget.setEnabled(False)
         self.countListWidget.setMaximumWidth(40)
-        classListLayout.addWidget(self.classlistWidget)
+        classListLayout.addWidget(self.classListWidget)
+        classListLayout.addWidget(self.colorListWidget)
         classListLayout.addWidget(self.countListWidget)
 
         # Create text box for entering the class names
@@ -118,6 +126,7 @@ class BboxQWidget(QWidget):
         self.data_folder = platformdirs.user_data_dir("simple_annotate")
         os.makedirs(self.data_folder, exist_ok=True)
         self.options_path = os.path.join(self.data_folder, "display_options.yaml")
+        self.colors = ["red", "green", "blue", "cyan", "magenta", "yellow", "black", "white"]
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
@@ -137,8 +146,8 @@ class BboxQWidget(QWidget):
         if item and item.isSelected() and self.dirty:
             item.setForeground(QBrush(QColorConstants.Red))
         shapes_layer = self.viewer.layers["bbox_layer"]
-        if self.classlistWidget.currentItem():
-            shapes_layer.feature_defaults["class"] = self.classlistWidget.currentItem().text()
+        if self.classListWidget.currentItem():
+            shapes_layer.feature_defaults["class"] = self.classListWidget.currentItem().text()
 
     def bounding_box_display_changed(self, event):
         shapes_layer = self.viewer.layers["bbox_layer"]
@@ -168,7 +177,7 @@ class BboxQWidget(QWidget):
 
     def class_clicked(self):
         shapes_layer = self.viewer.layers["bbox_layer"]
-        selected_item = self.classlistWidget.selectedItems()[0]
+        selected_item = self.classListWidget.selectedItems()[0]
         if not selected_item:
             return
         print("previous default class:", shapes_layer.feature_defaults["class"])
@@ -181,11 +190,26 @@ class BboxQWidget(QWidget):
             shapes_layer.features.loc[idxs, "class"] = class_name
             shapes_layer.refresh_text()
 
+
+    def color_clicked(self):
+        sender = self.sender()
+        row = -1
+        color = None
+        for index in range(self.colorListWidget.count()):
+            item = self.colorListWidget.item(index)
+            widget = self.colorListWidget.itemWidget(item)
+            if widget is sender:
+                row = index
+                break
+        color = self.colors[row]
+        print(row, color)
+
+
     def add_class(self):
         """Adds the text in the class_textbox to the classlistWidget."""
         class_name = self.class_textbox.text()
         if class_name:
-            exist_class_names = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+            exist_class_names = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
             if len(exist_class_names) == 0:
                 self.current_class_number = 0
             else:
@@ -200,10 +224,29 @@ class BboxQWidget(QWidget):
                 if self.current_class_number != len(exist_class_names):
                     self.popup("numbering")
             class_name = f"{self.current_class_number}: {class_name}"
-            self.classlistWidget.addItem(class_name)
+            self.classListWidget.addItem(class_name)
             self.countListWidget.addItem("0")
             self.sort_classlist()
+            self.addNextColorItem()
             self.class_textbox.clear()
+
+
+    def addNextColorItem(self):
+        index = self.colorListWidget.count()
+        color = self.colors[index % len(self.colors)]
+        item = QListWidgetItem()
+        widget = QWidget()
+        colorButton = QPushButton()
+        colorButton.setStyleSheet("background-color: " + color + ";")
+        colorButton.setFixedWidth(15)
+        colorButton.setFlat(True)
+        colorButton.clicked.connect(self.color_clicked)
+        widgetLayout = QHBoxLayout()
+        widgetLayout.addWidget(colorButton)
+        widget.setLayout(widgetLayout)
+        self.colorListWidget.addItem(item)
+        self.colorListWidget.setItemWidget(item, colorButton)
+
 
     def popup(self, message_type=None):
         if message_type == "None":
@@ -252,17 +295,18 @@ class BboxQWidget(QWidget):
         if button.text() == "Cancel":
             return
         else:
-            selected_item = self.classlistWidget.selectedItems()[0]
-            selected_index = self.classlistWidget.selectedIndexes()[0]
-            self.classlistWidget.takeItem(self.classlistWidget.row(selected_item))
+            selected_item = self.classListWidget.selectedItems()[0]
+            selected_index = self.classListWidget.selectedIndexes()[0]
+            self.classListWidget.takeItem(self.classListWidget.row(selected_item))
             self.countListWidget.takeItem(selected_index.row())
+            self.colorListWidget.takeItem(selected_index.row())
             if button.text() == "&Yes":
                 self.sort_classlist(renumber=True)
             else:
                 pass
 
     def sort_classlist(self, renumber=False):
-        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
 
         def extract_number(item_text):
             return int(item_text.split(":")[0].strip())
@@ -276,13 +320,13 @@ class BboxQWidget(QWidget):
                 renumbered_items_text.append(f"{idx}: {text.strip()}")
             sorted_items_text = renumbered_items_text
 
-        self.classlistWidget.clear()
+        self.classListWidget.clear()
         for item_text in sorted_items_text:
-            self.classlistWidget.addItem(item_text)
+            self.classListWidget.addItem(item_text)
 
     def del_class(self):
         """Deletes the selected class from the classlistWidget and the features dictionary."""
-        if not self.classlistWidget.selectedItems():
+        if not self.classListWidget.selectedItems():
             return
         self.popup("renumbering")
 
@@ -316,10 +360,10 @@ class BboxQWidget(QWidget):
         if clicked_button.text() == "Cancel":
             return
         else:
-            self.classlistWidget.clear()
+            self.classListWidget.clear()
             self.countListWidget.clear()
             for class_id, class_name in class_data_from_yaml["names"].items():
-                self.classlistWidget.addItem(f"{class_id}: {class_name}")
+                self.classListWidget.addItem(f"{class_id}: {class_name}")
                 self.countListWidget.addItem(f"0")
             self.sort_classlist()
         self.update_list_colors_and_class_count()
@@ -363,15 +407,15 @@ class BboxQWidget(QWidget):
 
         class_file = os.path.dirname(image_file) + "/class.yaml"
         current_class = "none"
-        if self.classlistWidget.currentItem():
-            current_class = self.classlistWidget.currentItem().text()
+        if self.classListWidget.currentItem():
+            current_class = self.classListWidget.currentItem().text()
         print("current_class: ", current_class)
         if os.path.isfile(class_file):
             with open(class_file) as file:
                 class_data_from_yaml = yaml.safe_load(file)
             print(class_data_from_yaml)
-            if self.classlistWidget.count() != 0:
-                items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+            if self.classListWidget.count() != 0:
+                items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
                 items_dict = {
                     int(item_text.split(":")[0].strip()): item_text.split(":")[1].strip() for item_text in items_text
                 }
@@ -382,9 +426,9 @@ class BboxQWidget(QWidget):
                     pass
             else:
                 for class_id, class_name in class_data_from_yaml["names"].items():
-                    self.classlistWidget.addItem(f"{class_id}: {class_name}")
+                    self.classListWidget.addItem(f"{class_id}: {class_name}")
             self.sort_classlist()
-        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
         self.numbers = [int(name.split(":")[0]) for name in items_text]
         items_dict_with_no = {
             item_text.split(":")[0].strip(): item_text.split(":")[1].strip() for item_text in items_text
@@ -407,7 +451,7 @@ class BboxQWidget(QWidget):
                     if str(int(class_id)) in items_dict_with_no:
                         classes.append(str(int(class_id)) + ": " + items_dict_with_no[str(int(class_id))])
                     else:
-                        self.classlistWidget.addItem(str(int(class_id)) + ": ")
+                        self.classListWidget.addItem(str(int(class_id)) + ": ")
                         items_dict_with_no[str(int(class_id))] = ""
                         self.numbers.append(int(class_id))
                         classes.append(str(int(class_id)) + ": ")
@@ -423,10 +467,10 @@ class BboxQWidget(QWidget):
             shapes_layer = self.viewer.layers["bbox_layer"]
             shapes_layer.data = []
             shapes_layer.features = shapes_layer.features.iloc[:0]
-        for row in range(self.classlistWidget.count()):
-            item = self.classlistWidget.item(row)
+        for row in range(self.classListWidget.count()):
+            item = self.classListWidget.item(row)
             if item.text() == current_class:
-                self.classlistWidget.setCurrentItem(item)
+                self.classListWidget.setCurrentItem(item)
         self.viewer.reset_view()
         self.dirty = False
         self.update_list_colors_and_class_count()
@@ -448,7 +492,7 @@ class BboxQWidget(QWidget):
 
         annotations = []
 
-        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
         items_dict = {int(item_text.split(":")[0].strip()): item_text.split(":")[1].strip() for item_text in items_text}
         class_data = {"names": items_dict}
         class_file = os.path.join(os.path.dirname(annotation_file), "class.yaml")
@@ -555,11 +599,11 @@ class BboxQWidget(QWidget):
             if item.isSelected() and self.dirty:
                 item.setForeground(QBrush(QColorConstants.Red))
         self.countListWidget.clear()
-        if not self.classlistWidget.count() > 0:
+        if not self.classListWidget.count() > 0:
             return
-        counts = ["0"] * self.classlistWidget.count()
+        counts = ["0"] * self.classListWidget.count()
         self.countListWidget.addItems(counts)
-        items_text = [self.classlistWidget.item(i).text() for i in range(self.classlistWidget.count())]
+        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
         items_id_list = [int(item_text.split(":")[0].strip()) for item_text in items_text]
         for key, value in self.class_counts.items():
             index = items_id_list.index(key)
