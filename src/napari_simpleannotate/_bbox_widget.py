@@ -401,9 +401,11 @@ class BboxQWidget(QWidget):
         else:
             self.classListWidget.clear()
             self.countListWidget.clear()
+            self.colorListWidget.clear()
             for class_id, class_name in class_data_from_yaml["names"].items():
                 self.classListWidget.addItem(f"{class_id}: {class_name}")
                 self.countListWidget.addItem(f"0")
+                self.addNextColorItem()
             self.sort_classlist()
         self.update_list_colors_and_class_count()
 
@@ -686,4 +688,3 @@ class BboxQWidget(QWidget):
         items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
         items_id_list = [int(item_text.split(":")[0].strip()) for item_text in items_text]
         return items_id_list
-    
