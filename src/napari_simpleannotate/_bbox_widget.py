@@ -7,7 +7,7 @@ import numpy as np
 import skimage.io
 import yaml
 import platformdirs
-from qtpy.QtCore import Qt, QObject
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -20,8 +20,13 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QListWidgetItem,
+    QColorDialog,
 )
-from qtpy.QtGui import QBrush, QColorConstants
+from qtpy.QtGui import (
+    QBrush,
+    QColorConstants,
+    QColor,
+)
 
 from ._utils import find_missing_number, save_text, xywh2xyxy
 
@@ -56,7 +61,13 @@ class BboxQWidget(QWidget):
         self.clear_button.clicked.connect(self.listWidget.clear)
 
         # Add the "Keep Contrast" checkbox
+        checkboxesLayout = QHBoxLayout()
         self.keep_contrast_checkbox = QCheckBox("Keep Contrast", self)
+        self.show_labels_checkbox = QCheckBox("Show Labels", self)
+        self.show_labels_checkbox.setChecked(True)
+        self.show_labels_checkbox.checkStateChanged.connect(self.show_labels_changed)
+        checkboxesLayout.addWidget(self.keep_contrast_checkbox)
+        checkboxesLayout.addWidget(self.show_labels_checkbox)
 
         # Create a list widget for displaying the list of classes
         classListLayout = QHBoxLayout()
@@ -66,7 +77,6 @@ class BboxQWidget(QWidget):
 
         self.colorListWidget = QListWidget()
         self.colorListWidget.setSelectionMode(QAbstractItemView.SingleSelection)
-        # self.colorListWidget.itemClicked.connect(self.color_clicked)
         self.colorListWidget.setMaximumWidth(15)
 
         self.countListWidget = QListWidget()
@@ -100,7 +110,7 @@ class BboxQWidget(QWidget):
         layout.addLayout(hbox)
         layout.addWidget(self.listWidget)
         layout.addWidget(self.clear_button)
-        layout.addWidget(self.keep_contrast_checkbox)
+        layout.addLayout(checkboxesLayout)
         layout.addLayout(classListLayout)
         layout.addWidget(self.class_textbox)
         layout.addWidget(self.add_class_button)
@@ -126,7 +136,8 @@ class BboxQWidget(QWidget):
         self.data_folder = platformdirs.user_data_dir("simple_annotate")
         os.makedirs(self.data_folder, exist_ok=True)
         self.options_path = os.path.join(self.data_folder, "display_options.yaml")
-        self.colors = ["red", "green", "blue", "cyan", "magenta", "yellow", "black", "white"]
+        self.colors = {0: "red", 1: "green", 2: "blue", 3: "cyan", 4: "magenta", 5: "yellow", 6: "black", 7: "white"}
+
 
     def initLayers(self):
         """Initializes the image and shapes layers in the napari viewer."""
@@ -178,6 +189,7 @@ class BboxQWidget(QWidget):
     def class_clicked(self):
         shapes_layer = self.viewer.layers["bbox_layer"]
         selected_item = self.classListWidget.selectedItems()[0]
+        selectedIndex = self.classListWidget.currentIndex().row()
         if not selected_item:
             return
         print("previous default class:", shapes_layer.feature_defaults["class"])
@@ -189,20 +201,47 @@ class BboxQWidget(QWidget):
             class_name = selected_item.text()
             shapes_layer.features.loc[idxs, "class"] = class_name
             shapes_layer.refresh_text()
+            self.dirty = True
+        classIDs = self.getClassIDs()
+        shapes_layer.current_edge_color = self.colors[classIDs[selectedIndex]]
 
 
     def color_clicked(self):
         sender = self.sender()
         row = -1
-        color = None
         for index in range(self.colorListWidget.count()):
             item = self.colorListWidget.item(index)
             widget = self.colorListWidget.itemWidget(item)
             if widget is sender:
                 row = index
                 break
-        color = self.colors[row]
-        print(row, color)
+        if row < 0:
+            return
+        color = list(self.colors.values())[row]
+        newColor = QColorDialog.getColor(initial=QColor(color), options=QColorDialog.ShowAlphaChannel)
+        if not newColor.isValid():
+            return
+        self.colors[row] = newColor.name()
+        widget.setStyleSheet("background-color: " + newColor.name() + ";")
+        self.saveColors()
+        self.updateColors()
+
+
+    def saveColors(self):
+        path = self.getCurrentDir()
+        if not path:
+            return
+        path = os.path.join(path, "colors.yaml")
+        with open(path, 'w') as file:
+            yaml.dump(self.colors, file, default_flow_style=False)
+
+
+    def show_labels_changed(self, state):
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        if state == Qt.CheckState.Checked:
+            shapes_layer.text = self.text
+        else:
+            shapes_layer.text = None
 
 
     def add_class(self):
@@ -384,6 +423,7 @@ class BboxQWidget(QWidget):
                     self.saveAnnotationsFor(previous_item.text())
                 elif response == QMessageBox.No:
                     self.dirty = False
+        shapes_layer = self.viewer.layers["bbox_layer"]
         self.previous_contrast_limits = self.viewer.layers["image_layer"].contrast_limits
         """Opens an image and updates the image layer in the napari viewer."""
         if current_item is None:
@@ -406,14 +446,18 @@ class BboxQWidget(QWidget):
         classes = []
 
         class_file = os.path.dirname(image_file) + "/class.yaml"
+        colors_file = os.path.dirname(image_file) + "/colors.yaml"
         current_class = "none"
         if self.classListWidget.currentItem():
             current_class = self.classListWidget.currentItem().text()
-        print("current_class: ", current_class)
+        if not os.path.isfile(colors_file):
+            self.saveColors()
+        else:
+            with open(colors_file) as file:
+                self.colors = yaml.safe_load(file)
         if os.path.isfile(class_file):
             with open(class_file) as file:
                 class_data_from_yaml = yaml.safe_load(file)
-            print(class_data_from_yaml)
             if self.classListWidget.count() != 0:
                 items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
                 items_dict = {
@@ -427,6 +471,7 @@ class BboxQWidget(QWidget):
             else:
                 for class_id, class_name in class_data_from_yaml["names"].items():
                     self.classListWidget.addItem(f"{class_id}: {class_name}")
+                    self.addNextColorItem()
             self.sort_classlist()
         items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
         self.numbers = [int(name.split(":")[0]) for name in items_text]
@@ -435,6 +480,7 @@ class BboxQWidget(QWidget):
         }
 
         txt_file = os.path.splitext(image_file)[0] + ".txt"
+        colors = []
         if os.path.exists(txt_file):
             with open(txt_file) as f:
                 lines = f.readlines()
@@ -442,6 +488,7 @@ class BboxQWidget(QWidget):
                 for line in lines:
                     class_id, x_center, y_center, width, height = line.strip().split()
                     class_id = int(class_id)
+                    colors.append(self.colors[class_id])
                     x_center, y_center, width, height = map(float, [x_center, y_center, width, height])
                     x_min, y_min, x_max, y_max = xywh2xyxy(
                         [x_center, y_center, width, height], scale=(image_width, image_height)
@@ -455,14 +502,14 @@ class BboxQWidget(QWidget):
                         items_dict_with_no[str(int(class_id))] = ""
                         self.numbers.append(int(class_id))
                         classes.append(str(int(class_id)) + ": ")
-                shapes_layer = self.viewer.layers["bbox_layer"]
                 shapes_layer.data = []
                 shapes_layer.add_rectangles(shapes_data)
                 shapes_layer.features["class"] = classes
+                shapes_layer.features["color"] = colors
                 self.sort_classlist()
                 shapes_layer.refresh_text()
-                print(shapes_layer.features)
-                print(shapes_layer.text)
+                rgbfColors = [list(QColor(c).getRgbF()) for c in colors]
+                shapes_layer.edge_color = rgbfColors # setting the property also refreshes the display
         else:
             shapes_layer = self.viewer.layers["bbox_layer"]
             shapes_layer.data = []
@@ -478,6 +525,29 @@ class BboxQWidget(QWidget):
     def saveAnnotations(self):
         current_image_file = self.listWidget.currentItem().text()
         self.saveAnnotationsFor(current_image_file)
+
+    def getCurrentDir(self):
+        if self.listWidget.count() == 0:
+            return None
+        if self.listWidget.currentItem():
+            imagePath = self.listWidget.currentItem().text()
+        else:
+            imagePath = self.listWidget.item(0).text()
+        if not imagePath:
+            return None
+        folder = os.path.dirname(imagePath)
+        return folder
+
+    def updateColors(self):
+        shapes_layer = self.viewer.layers["bbox_layer"]
+        newColors = []
+        for className in shapes_layer.features["class"]:
+            classID = int(className.split(":")[0])
+            newColors.append(self.colors[classID])
+        self.features["color"] = newColors
+        rgbfColors = [list(QColor(c).getRgbF()) for c in newColors]
+        shapes_layer.edge_color = rgbfColors  # setting the property also refreshes the display
+
 
     def saveAnnotationsFor(self, image_file):
         """Saves the bounding box annotations in the shapes layer in YOLO format."""
@@ -496,7 +566,7 @@ class BboxQWidget(QWidget):
         items_dict = {int(item_text.split(":")[0].strip()): item_text.split(":")[1].strip() for item_text in items_text}
         class_data = {"names": items_dict}
         class_file = os.path.join(os.path.dirname(annotation_file), "class.yaml")
-
+        self.saveColors()
         # For each shape (rectangle)
         for i, shape_data in enumerate(shapes_data):
             # Calculate the center, width, and height of the shape
@@ -603,8 +673,17 @@ class BboxQWidget(QWidget):
             return
         counts = ["0"] * self.classListWidget.count()
         self.countListWidget.addItems(counts)
-        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
-        items_id_list = [int(item_text.split(":")[0].strip()) for item_text in items_text]
+        items_id_list = self.getClassIDs()
         for key, value in self.class_counts.items():
             index = items_id_list.index(key)
             self.countListWidget.item(index).setText(str(value))
+            item = self.colorListWidget.item(index)
+            widget = self.colorListWidget.itemWidget(item)
+            widget.setStyleSheet("background-color: " + self.colors[key] + ";")
+
+
+    def getClassIDs(self):
+        items_text = [self.classListWidget.item(i).text() for i in range(self.classListWidget.count())]
+        items_id_list = [int(item_text.split(":")[0].strip()) for item_text in items_text]
+        return items_id_list
+    
