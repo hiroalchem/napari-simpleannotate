@@ -33,8 +33,8 @@ def test_add_class(make_napari_viewer):
     widget.add_class()
 
     # Check that class was added
-    assert widget.classlistWidget.count() == 1
-    assert widget.classlistWidget.item(0).text() == "0: person"
+    assert widget.classListWidget.count() == 1
+    assert widget.classListWidget.item(0).text() == "0: person"
     assert widget.class_textbox.text() == ""  # Should be cleared
 
 
@@ -53,7 +53,7 @@ def test_add_duplicate_class(make_napari_viewer):
 
     # Should still have only one class (the actual behavior prints a message)
     # Note: In test mode, popup is skipped and append behavior is used
-    assert widget.classlistWidget.count() == 1
+    assert widget.classListWidget.count() == 1
 
 
 def test_sort_classlist(make_napari_viewer):
@@ -62,16 +62,16 @@ def test_sort_classlist(make_napari_viewer):
     widget = BboxQWidget(viewer)
 
     # Add classes in non-sequential order
-    widget.classlistWidget.addItem("2: car")
-    widget.classlistWidget.addItem("0: person")
-    widget.classlistWidget.addItem("1: bike")
+    widget.classListWidget.addItem("2: car")
+    widget.classListWidget.addItem("0: person")
+    widget.classListWidget.addItem("1: bike")
 
     widget.sort_classlist()
 
     # Check order
-    assert widget.classlistWidget.item(0).text() == "0: person"
-    assert widget.classlistWidget.item(1).text() == "1: bike"
-    assert widget.classlistWidget.item(2).text() == "2: car"
+    assert widget.classListWidget.item(0).text() == "0: person"
+    assert widget.classListWidget.item(1).text() == "1: bike"
+    assert widget.classListWidget.item(2).text() == "2: car"
 
 
 def test_del_class(make_napari_viewer):
@@ -84,13 +84,13 @@ def test_del_class(make_napari_viewer):
     widget.add_class()
 
     # Select and delete it
-    widget.classlistWidget.setCurrentRow(0)
+    widget.classListWidget.setCurrentRow(0)
 
     with patch("qtpy.QtWidgets.QMessageBox.question", return_value=16384):  # QMessageBox.Yes
         widget.del_class()
 
     # Check that class was deleted
-    assert widget.classlistWidget.count() == 0
+    assert widget.classListWidget.count() == 0
 
 
 @patch("qtpy.QtWidgets.QFileDialog.getOpenFileName")
